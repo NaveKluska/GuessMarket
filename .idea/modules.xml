@@ -3,6 +3,8 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/GuessMarket.iml" filepath="$PROJECT_DIR$/GuessMarket.iml" />
+      <module fileurl="file://$PROJECT_DIR$/guess-market-console/guess-market-console.iml" filepath="$PROJECT_DIR$/guess-market-console/guess-market-console.iml" />
+      <module fileurl="file://$PROJECT_DIR$/guess-market-engine/guess-market-engine.iml" filepath="$PROJECT_DIR$/guess-market-engine/guess-market-engine.iml" />
     </modules>
   </component>
 </project>
