@@ -1,33 +1,32 @@
-import java.util.ArrayList;
 import java.util.List;
 
-public class Event
+public class EventDetailsDTO
 {
     private final int id;
-    private String name;
-    private String description;
-    private int commission;
-    private CommissionType commissionType;
+    private final String name;
+    private final String description;
+    private final int commission;
+    private final CommissionType commissionType;
     private final List<Option> options;
-    private boolean activeStatus;
-    private int b;
-    private double accountBalance;
-    private double totalCommissionCollected;
+    private final boolean activeStatus;
+    private final int b;
+    private final double accountBalance;
+    private final double totalCommissionCollected;
     private final List<Transaction> transactions;
 
-    public Event(int id, String name, String description, int commission, CommissionType commissionType, List<Option> options, int b)
+    public EventDetailsDTO(final Event event)
     {
-        this.id = id;
-        this.name = name;
-        this.description = description;
-        this.commission = commission;
-        this.commissionType = commissionType;
-        this.options = options;
-        this.b = b;
-        this.activeStatus = false;
-        this.accountBalance = 0.0;
-        this.totalCommissionCollected = 0.0;
-        this.transactions = new ArrayList<>();
+        this.id = event.getId();
+        this.name = event.getName();
+        this.description = event.getDescription();
+        this.commission = event.getCommission();
+        this.commissionType = event.getCommissionType();
+        this.options = event.getOptions();
+        this.activeStatus = event.getActiveStatus();
+        this.b = event.getB();
+        this.accountBalance = event.getAccountBalance();
+        this.totalCommissionCollected = event.getTotalCommissionCollected();
+        this.transactions = event.getTransactions();
     }
 
     public int getId()

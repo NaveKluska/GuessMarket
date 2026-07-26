@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.List;
 
 public class Engine
 {
@@ -16,16 +17,24 @@ public class Engine
     }
 
     // 2. Show all events
-    public List<EventDTO> getAllEvents()
+    public List<EventSummaryDTO> getAllEvents()
     {
-        // TODO: Implement getting all events
-        return null;
+        List<EventSummaryDTO> result = new ArrayList<EventSummaryDTO>();
+
+        for (final Event event : events)
+        {
+            EventSummaryDTO eventSummary = new EventSummaryDTO(event);
+            result.add(eventSummary);
+        }
+
+        return result;
     }
 
     // 3. Show event status
-    public EventDTO getEventDetails(String eventId)
+    public EventDetailsDTO getEventDetails(final int eventId)
     {
-        // TODO: Implement getting specific event details
+        for 
+
         return null;
     }
 
