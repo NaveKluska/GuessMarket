@@ -124,11 +124,11 @@ public class MarketEngineImpl implements MarketEngine
             }
 
             if (optionIndex < 0 || optionIndex >= event.getOptions().size()) {
-                throw new IllegalArgumentException("Invalid option index: " + optionIndex);
+                throw new IllegalArgumentException("Invalid option selection.");
             }
 
-            final double cost = pricingModel.calculateCost(event, optionIndex, quantity);
-            final double commission = commissionCalculator.calculate(event, cost);
+            final double cost = event.calculateCost(optionIndex, quantity);
+            final double commission = commissionCalculator.calculate(cost, event.getCommission(), event.getCommissionType(), CommissionType.ON_PURCHASE);
 
             event.executePurchase(memberName, optionIndex, quantity, cost, commission);
 
@@ -154,32 +154,23 @@ public class MarketEngineImpl implements MarketEngine
             }
 
             if (winningOptionIndex < 0 || winningOptionIndex >= event.getOptions().size()) {
-                throw new IllegalArgumentException("Invalid winning option index: " + winningOptionIndex);
+                throw new IllegalArgumentException("Invalid winning option selection.");
             }
 
             // 1. Close the event so no one can buy shares anymore
-            event.deactivateEvent();
             final Option winningOption = event.getOptions().get(winningOptionIndex);
+            event.deactivateEvent(winningOptionIndex);
 
-            // 2. If ON_CLOSE, calculate the final commissions
-            if (event.getCommissionType() == CommissionType.ON_CLOSE) {
-                
-                // Look through every purchase ever made for this event
-                for (final Transaction transaction : event.getTransactions()) {
+            // 2. Calculate payouts and final commissions
+            for (final Transaction transaction : event.getTransactions()) {
+                if (transaction.getOptionName().equals(winningOption.getName())) {
+                    final double winAmount = transaction.getQuantity() * 1.0; 
+                    final double commission = commissionCalculator.calculate(winAmount, event.getCommission(), event.getCommissionType(), CommissionType.ON_CLOSE);
                     
-                    // If they bought the winning option, they get a payout!
-                    if (transaction.getOptionName().equals(winningOption.getName())) {
-                        
-                        // 1 share = 1 coin payout
-                        final double winAmount = transaction.getQuantity() * 1.0; 
-                        final double profit = winAmount - transaction.getPricePaid();
-                        
-                        if (profit > 0) {
-                            final double commission = profit * ((double) event.getCommission() / 100.0);
-                            // Add the commission to the Engine's pool
-                            event.collectCommission(commission); 
-                        }
+                    if (commission > 0) {
+                        event.collectCommission(commission);
                     }
+                    event.deductFromBalance(winAmount - commission);
                 }
             }
         }

@@ -13,7 +13,7 @@ public class LmsrPricingModel implements PricingModel {
         // 1. Calculate LMSR state BEFORE purchase: C = b * ln(sum(e^(q_i / b)))
         double sumBefore = 0.0;
         for (final Option opt : event.getOptions()) {
-            sumBefore += Math.exp(opt.getSharesBought() / b);
+            sumBefore += Math.exp(opt.getSharesBought() / (double) b);
         }
         final double costBefore = b * Math.log(sumBefore);
 
@@ -25,7 +25,7 @@ public class LmsrPricingModel implements PricingModel {
             if (opt.getName().equals(choiceName)) {
                 q += quantity; // Pretend we added the new shares
             }
-            sumAfter += Math.exp(q / b);
+            sumAfter += Math.exp(q / (double) b);
         }
         final double costAfter = b * Math.log(sumAfter);
 

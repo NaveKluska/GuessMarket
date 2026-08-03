@@ -2,6 +2,7 @@ package guessmarket.engine.parsing.impl;
 
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
+import guessmarket.engine.models.LmsrEvent;
 import guessmarket.engine.models.Option;
 import guessmarket.engine.parsing.api.FileParser;
 
@@ -99,7 +100,7 @@ public class EX1_XMLFileParser implements FileParser {
         List<Option> options = parseOptions(eventElement, id);
         int b = parseLMSRbValue(eventElement, id);
 
-        return new Event(id, name, description, commissionValue, commissionType, options, b);
+        return new LmsrEvent(id, name, description, commissionValue, commissionType, options, b);
     }
 
     private String parseName(Element eventElement, int eventId) {
@@ -226,12 +227,16 @@ public class EX1_XMLFileParser implements FileParser {
         }
         
         List<Option> options = new ArrayList<>();
+        Set<String> optionNames = new HashSet<>();
         for (int i = 0; i < optionNodes.size(); i++) {
             Element optionNode = optionNodes.get(i);
             
             String optionName = optionNode.getTextContent().trim();
             if (optionName.isEmpty()) {
                 throw new IllegalArgumentException("Error in Event " + eventId + ": GM-option must have a name!");
+            }
+            if (!optionNames.add(optionName.toLowerCase())) {
+                throw new IllegalArgumentException("Error in Event " + eventId + ": Duplicate option name found ('" + optionName + "')!");
             }
             options.add(new Option(optionName));
         }

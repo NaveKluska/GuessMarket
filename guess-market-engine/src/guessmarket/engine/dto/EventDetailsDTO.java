@@ -17,10 +17,10 @@ public class EventDetailsDTO
     private final CommissionType commissionType;
     private final List<OptionDTO> options;
     private final boolean activeStatus;
-    private final int b;
     private final double accountBalance;
     private final double totalCommissionCollected;
-    private final List<TransactionDTO> transactions;
+    private final List<TransactionDTOEX1> transactions;
+    private final String winningOptionName;
 
     public EventDetailsDTO(final Event event)
     {
@@ -30,31 +30,36 @@ public class EventDetailsDTO
         this.commission = event.getCommission();
         this.commissionType = event.getCommissionType();
         this.activeStatus = event.getActiveStatus();
-        this.b = event.getB();
         this.accountBalance = event.getAccountBalance();
         this.totalCommissionCollected = event.getTotalCommissionCollected();
-        this.options = mapOptions(event.getOptions());
+        this.options = mapOptions(event);
         this.transactions = mapTransactions(event.getTransactions());
+        this.winningOptionName = event.getWinningOptionName();
     }
 
-    private static List<OptionDTO> mapOptions(final List<Option> options) {
-        if (options == null) {
+    private static List<OptionDTO> mapOptions(final Event event) {
+        if (event.getOptions() == null) {
             return Collections.emptyList();
         }
+
+        final List<Option> options = event.getOptions();
         final List<OptionDTO> optionDTOs = new ArrayList<>();
-        for (final Option option : options) {
-            optionDTOs.add(new OptionDTO(option));
+        
+        for (int i = 0; i < options.size(); i++) {
+            Option option = options.get(i);
+            double prob = event.getOptionProbability(i);
+            optionDTOs.add(new OptionDTO(option, prob));
         }
         return Collections.unmodifiableList(optionDTOs);
     }
 
-    private static List<TransactionDTO> mapTransactions(final List<Transaction> transactions) {
+    private static List<TransactionDTOEX1> mapTransactions(final List<Transaction> transactions) {
         if (transactions == null) {
             return Collections.emptyList();
         }
-        final List<TransactionDTO> transactionDTOs = new ArrayList<>();
+        final List<TransactionDTOEX1> transactionDTOs = new ArrayList<>();
         for (final Transaction transaction : transactions) {
-            transactionDTOs.add(new TransactionDTO(transaction));
+            transactionDTOs.add(new TransactionDTOEX1(transaction));
         }
         return Collections.unmodifiableList(transactionDTOs);
     }
@@ -94,11 +99,6 @@ public class EventDetailsDTO
         return activeStatus;
     }
 
-    public int getB()
-    {
-        return b;
-    }
-
     public double getAccountBalance()
     {
         return accountBalance;
@@ -109,8 +109,13 @@ public class EventDetailsDTO
         return totalCommissionCollected;
     }
 
-    public List<TransactionDTO> getTransactions()
+    public List<TransactionDTOEX1> getTransactions()
     {
         return transactions;
+    }
+
+    public String getWinningOptionName()
+    {
+        return winningOptionName;
     }
 }

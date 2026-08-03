@@ -5,7 +5,7 @@ import guessmarket.engine.dto.EventDetailsDTO;
 import guessmarket.engine.dto.EventSummaryDTO;
 import guessmarket.engine.dto.OptionDTO;
 import guessmarket.engine.dto.ReceiptDTO;
-import guessmarket.engine.dto.TransactionDTO;
+import guessmarket.engine.dto.TransactionDTOEX1;
 import java.util.List;
 import java.util.Scanner;
 
@@ -62,7 +62,7 @@ public class ConsoleUIEX1 {
                     System.out.println("Exiting the system...");
                     break;
                 default:
-                    System.out.println("Not implemented yet!");
+                    System.out.println("Invalid choice. Please select an option between 1 and 8.");
             }
         }
     }
@@ -70,6 +70,10 @@ public class ConsoleUIEX1 {
     private void handleLoadXmlFile() {
         System.out.print("Please enter the full path to the XML file: ");
         String filePath = scanner.nextLine().trim();
+        if (filePath.isEmpty()) {
+            System.out.println("Error: File path cannot be empty.");
+            return;
+        }
         try {
             engine.loadData(filePath);
             System.out.println("Success! System data loaded successfully.");
@@ -96,36 +100,16 @@ public class ConsoleUIEX1 {
     }
 
     private void handleEventTradingStatus() {
-        handleDisplayEvents();
-        System.out.print("\nPlease enter the Event ID from the list above: ");
         try {
+            // Check if data is loaded before printing the prompt
+            engine.getAllEvents();
+            
+            handleDisplayEvents();
+            System.out.print("\nPlease enter the Event ID from the list above: ");
+            
             int eventId = Integer.parseInt(scanner.nextLine().trim());
             EventDetailsDTO details = engine.getEventDetails(eventId);
-            
-            System.out.println("\n--- Event Trading Status ---");
-            System.out.printf("Event: %s (ID: %d)\n", details.getName(), details.getId());
-            String status = details.getActiveStatus() ? "Active" : "Closed";
-            System.out.printf("Status: %s\n", status);
-            
-            System.out.printf("Total Account Balance: %.2f\n", details.getAccountBalance());
-            System.out.printf("Total Commission Collected: %.2f\n", details.getTotalCommissionCollected());
-            
-            System.out.println("\nOptions:");
-            for (OptionDTO option : details.getOptions()) {
-                System.out.printf("- %s (Shares bought: %d)\n", option.getName(), option.getSharesBought());
-            }
-            
-            System.out.println("\nTrade History:");
-            if (details.getTransactions().isEmpty()) {
-                System.out.println("No transactions yet.");
-            } else {
-                for (TransactionDTO tx : details.getTransactions()) {
-                    System.out.printf("[%s] %s bought %d shares of '%s' for %.2f total\n", 
-                        tx.getTimestamp().toString(), tx.getUserName(), tx.getQuantity(), tx.getOptionName(), tx.getPricePaid());
-                }
-            }
-            System.out.println("----------------------------");
-            
+            printEventTradingStatus(details);
         } catch (NumberFormatException e) {
             System.out.println("Error: Event ID must be a valid number.");
         } catch (Exception e) {
@@ -133,9 +117,40 @@ public class ConsoleUIEX1 {
         }
     }
 
+    private void printEventTradingStatus(EventDetailsDTO details) {
+        System.out.println("\n--- Event Trading Status ---");
+        System.out.printf("Event: %s (ID: %d)\n", details.getName(), details.getId());
+        String status = details.getActiveStatus() ? "Active" : "Closed";
+        System.out.printf("Status: %s\n", status);
+        if (!details.getActiveStatus() && details.getWinningOptionName() != null) {
+            System.out.printf("Winning Option: %s\n", details.getWinningOptionName());
+        }
+        
+        System.out.printf("Total Account Balance: %.2f\n", details.getAccountBalance());
+        System.out.printf("Total Commission Collected: %.2f\n", details.getTotalCommissionCollected());
+        
+        System.out.println("\nOptions:");
+        for (OptionDTO option : details.getOptions()) {
+            System.out.printf("- %s (Current Value: %.2f | Shares bought: %d)\n", option.getName(), option.getCurrentProbability(), option.getSharesBought());
+        }
+        
+        System.out.println("\nTrade History:");
+        if (details.getTransactions().isEmpty()) {
+            System.out.println("No transactions yet.");
+        } else {
+            List<TransactionDTOEX1> txs = details.getTransactions();
+            for (int i = txs.size() - 1; i >= 0; i--) {
+                TransactionDTOEX1 tx = txs.get(i);
+                System.out.printf("Bought %d shares of '%s' for %.2f total\n", 
+                    tx.getQuantity(), tx.getOptionName(), tx.getPricePaid());
+            }
+        }
+        System.out.println("----------------------------");
+    }
+
     private void handleParticipateInEvent() {
         try {
-            int eventId = displayActiveEventsAndSelectOne();
+            int eventId = displayActiveEventsAndSelectOne("to participate in");
             if (eventId == -1) return;
 
             EventDetailsDTO details = engine.getEventDetails(eventId);
@@ -143,8 +158,12 @@ public class ConsoleUIEX1 {
 
             System.out.print("\nEnter your member name: ");
             String memberName = scanner.nextLine().trim();
+            while (memberName.isEmpty()) {
+                System.out.print("Member name cannot be empty. Please enter your member name: ");
+                memberName = scanner.nextLine().trim();
+            }
 
-            System.out.print("Enter the Option Index (1 for first option, 2 for second): ");
+            System.out.print("Enter the Option Index (1 to " + details.getOptions().size() + "): ");
             int optionIndex = Integer.parseInt(scanner.nextLine().trim());
 
             System.out.print("Enter the quantity of shares to buy: ");
@@ -152,6 +171,7 @@ public class ConsoleUIEX1 {
 
             ReceiptDTO receipt = engine.buyShares(memberName, eventId, optionIndex - 1, quantity);
             displayReceipt(receipt);
+            printEventTradingStatus(receipt.getUpdatedEventStatus());
 
         } catch (NumberFormatException e) {
             System.out.println("Error: Please enter valid numbers for ID, Option Index, and Quantity.");
@@ -160,10 +180,10 @@ public class ConsoleUIEX1 {
         }
     }
 
-    private int displayActiveEventsAndSelectOne() {
+    private int displayActiveEventsAndSelectOne(String actionName) {
         List<EventSummaryDTO> activeEvents = engine.getActiveEvents();
         if (activeEvents.isEmpty()) {
-            System.out.println("There are no active events to participate in.");
+            System.out.println("There are no active events " + actionName + ".");
             return -1;
         }
 
@@ -173,36 +193,59 @@ public class ConsoleUIEX1 {
         }
 
         System.out.print("\nEnter the Event ID from the list above: ");
-        return Integer.parseInt(scanner.nextLine().trim());
+        int selectedId = Integer.parseInt(scanner.nextLine().trim());
+        
+        boolean found = false;
+        for (EventSummaryDTO event : activeEvents) {
+            if (event.getId() == selectedId) {
+                found = true;
+                break;
+            }
+        }
+        
+        if (!found) {
+            System.out.println("Error: The selected Event ID is not in the active events list.");
+            return -1;
+        }
+        
+        return selectedId;
     }
 
     private void displayEventOptions(EventDetailsDTO details) {
         System.out.println("\n--- Current Event Status ---");
         int i = 1;
         for (OptionDTO option : details.getOptions()) {
-            System.out.printf("%d. %s (Shares bought: %d)\n", i++, option.getName(), option.getSharesBought());
+            System.out.printf("%d. %s (Current Value: %.2f | Shares bought: %d)\n", i++, option.getName(), option.getCurrentProbability(), option.getSharesBought());
         }
     }
 
     private void displayReceipt(ReceiptDTO receipt) {
-        System.out.println("\n--- Purchase Receipt ---");
-        System.out.printf("Cost of Shares: %.2f\n", receipt.getCostOfShares());
-        System.out.printf("Commission Paid: %.2f\n", receipt.getCommissionPaid());
+        System.out.println("\n--- Receipt ---");
+        System.out.printf("Cost of shares: %.2f\n", receipt.getCostOfShares());
+        if (receipt.getCommissionPaid() > 0) {
+            System.out.printf("Commission Paid: %.2f\n", receipt.getCommissionPaid());
+        }
         System.out.printf("Total Paid: %.2f\n", receipt.getTotalPaid());
-        System.out.println("------------------------");
+        System.out.println("-----------------");
     }
 
     private void handleCloseEvent() {
         try {
-            System.out.print("Enter the Event ID to close: ");
-            int eventId = Integer.parseInt(scanner.nextLine().trim());
-            
-            System.out.print("Enter the Winning Option Index (1 for first, 2 for second): ");
+            int eventId = displayActiveEventsAndSelectOne("to close");
+            if (eventId == -1) return;
+
+            EventDetailsDTO details = engine.getEventDetails(eventId);
+            printEventTradingStatus(details);
+
+            System.out.print("Enter the Winning Option Index (1 to " + details.getOptions().size() + "): ");
             int winningOptionIndex = Integer.parseInt(scanner.nextLine().trim());
             
             engine.closeEvent(eventId, winningOptionIndex - 1);
             
             System.out.println("Success! Event " + eventId + " has been closed and payouts have been calculated.");
+            
+            EventDetailsDTO finalDetails = engine.getEventDetails(eventId);
+            printEventTradingStatus(finalDetails);
             
         } catch (NumberFormatException e) {
             System.out.println("Error: Please enter valid numbers for ID and Winning Option.");
@@ -214,6 +257,10 @@ public class ConsoleUIEX1 {
     private void handleSaveState() {
         System.out.print("Enter the full path and filename (without extension) to save to: ");
         String filePath = scanner.nextLine().trim();
+        if (filePath.isEmpty()) {
+            System.out.println("Error: File path cannot be empty.");
+            return;
+        }
         try {
             engine.saveState(filePath);
             System.out.println("Success! System state saved to " + filePath + ".dat");
@@ -225,6 +272,10 @@ public class ConsoleUIEX1 {
     private void handleLoadState() {
         System.out.print("Enter the full path and filename (without extension) to load from: ");
         String filePath = scanner.nextLine().trim();
+        if (filePath.isEmpty()) {
+            System.out.println("Error: File path cannot be empty.");
+            return;
+        }
         try {
             engine.loadState(filePath);
             System.out.println("Success! System state loaded from " + filePath + ".dat");

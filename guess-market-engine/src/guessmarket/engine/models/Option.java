@@ -26,6 +26,9 @@ public class Option implements Serializable
 
     public void addShares(int amount)
     {
+        if (amount < 0) {
+            throw new IllegalArgumentException("Amount of shares to add cannot be negative.");
+        }
         this.sharesBought += amount;
     }
 }

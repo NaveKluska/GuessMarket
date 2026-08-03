@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Guess-Market xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="GM-EX1-schema.xsd">
+    <GM-events>
+        <GM-event name="Rain Tomorrow">
+            <id>1</id>
+            <description>Will it rain in Tel Aviv tomorrow?</description>
+            <comision type="on-purchase">10</comision>
+            <GM-options>
+                <GM-option>Yes</GM-option>
+                <GM-option>No</GM-option>
+            </GM-options>
+            <GM-method>
+                <GM-LMSR>
+                    <b>150</b>
+                </GM-LMSR>
+            </GM-method>
+        </GM-event>
+        <GM-event name="Election Outcome">
+            <id>2</id>
+            <description>Will the incumbent win the upcoming election?</description>
+            <comision type="on-close">0</comision>
+            <GM-options>
+                <GM-option>Win</GM-option>
+                <GM-option>Lose</GM-option>
+            </GM-options>
+            <GM-method>
+                <GM-LMSR>
+                    <b>500</b>
+                </GM-LMSR>
+            </GM-method>
+        </GM-event>
+        <GM-event name="Stock Above 100">
+            <id>3</id>
+            <description>Will the stock price close above 100 by year end?</description>
+            <comision type="on-purchase">90</comision>
+            <GM-options>
+                <GM-option>Above</GM-option>
+                <GM-option>Below</GM-option>
+            </GM-options>
+            <GM-method>
+                <GM-LMSR>
+                    <b>1</b>
+                </GM-LMSR>
+            </GM-method>
+        </GM-event>
+    </GM-events>
+</Guess-Market>
