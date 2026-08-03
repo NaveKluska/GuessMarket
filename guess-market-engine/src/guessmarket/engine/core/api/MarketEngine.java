@@ -58,6 +58,22 @@ public interface MarketEngine {
     void closeEvent(int eventId, int winningOptionIndex) throws Exception;
 
     /**
+     * Saves the current system state to an external file.
+     *
+     * @param filePath the full path (without extension) to save the state to
+     * @throws Exception if saving fails
+     */
+    void saveState(String filePath) throws Exception;
+
+    /**
+     * Loads a previously saved system state from a file.
+     *
+     * @param filePath the full path (without extension) to load the state from
+     * @throws Exception if loading fails
+     */
+    void loadState(String filePath) throws Exception;
+
+    /**
      * Exits the system and handles any required shutdown or state-saving procedures.
      *
      * @throws Exception if an error occurs during shutdown

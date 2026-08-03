@@ -1,10 +1,12 @@
 package guessmarket.engine.models;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Event
+public class Event implements Serializable
 {
+    private static final long serialVersionUID = 1L;
     private final int id;
     private String name;
     private String description;
@@ -26,7 +28,7 @@ public class Event
         this.commissionType = commissionType;
         this.options = options;
         this.b = b;
-        this.activeStatus = false;
+        this.activeStatus = true;
         this.accountBalance = 0.0;
         this.totalCommissionCollected = 0.0;
         this.transactions = new ArrayList<>();

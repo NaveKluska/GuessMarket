@@ -1,9 +1,11 @@
 package guessmarket.engine.models;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 
-public class Transaction
+public class Transaction implements Serializable
 {
+    private static final long serialVersionUID = 1L;
     private final String userName;
     private final String optionName;
     private final int quantity;

@@ -12,6 +12,10 @@ import guessmarket.engine.billing.api.CommissionCalculator;
 import guessmarket.engine.parsing.api.FileParser;
 import guessmarket.engine.pricing.api.PricingModel;
 
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -178,6 +182,30 @@ public class MarketEngineImpl implements MarketEngine
                     }
                 }
             }
+        }
+    }
+
+    @Override
+    public void saveState(final String filePath) throws Exception
+    {
+        if (!isDataLoaded) {
+            throw new IllegalStateException("No data is currently loaded to save.");
+        }
+
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(filePath + ".dat"))) {
+            oos.writeObject(new ConcurrentHashMap<>(events));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public void loadState(final String filePath) throws Exception
+    {
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filePath + ".dat"))) {
+            Map<Integer, Event> loaded = (Map<Integer, Event>) ois.readObject();
+            events.clear();
+            events.putAll(loaded);
+            this.isDataLoaded = true;
         }
     }
 

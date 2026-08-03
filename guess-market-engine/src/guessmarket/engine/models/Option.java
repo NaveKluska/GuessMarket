@@ -1,7 +1,10 @@
 package guessmarket.engine.models;
 
-public class Option
+import java.io.Serializable;
+
+public class Option implements Serializable
 {
+    private static final long serialVersionUID = 1L;
     private final String name;
     private int sharesBought;
 
