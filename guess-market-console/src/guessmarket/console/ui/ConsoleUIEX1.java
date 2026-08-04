@@ -5,7 +5,7 @@ import guessmarket.engine.dto.EventDetailsDTO;
 import guessmarket.engine.dto.EventSummaryDTO;
 import guessmarket.engine.dto.OptionDTO;
 import guessmarket.engine.dto.ReceiptDTO;
-import guessmarket.engine.dto.TransactionDTOEX1;
+import guessmarket.engine.dto.TransactionDTO;
 import java.util.List;
 import java.util.Scanner;
 
@@ -87,11 +87,18 @@ public class ConsoleUIEX1 {
             List<EventSummaryDTO> events = engine.getAllEvents();
             System.out.println("\n--- All System Events ---");
             for (EventSummaryDTO event : events) {
-                String status = event.getActiveStatus() ? "Active" : "Closed";
-                System.out.printf("ID: %d | Name: %s | Status: %s\n", event.getId(), event.getName(), status);
+                System.out.printf("Event ID: %d\n", event.getId());
+                System.out.printf("Name: %s\n", event.getName());
                 System.out.printf("Description: %s\n", event.getDescription());
-                System.out.printf("Commission: %d%% (%s)\n", event.getCommission(), event.getCommissionType());
-                System.out.println("Options: " + String.join(" vs ", event.getOptions()));
+                System.out.printf("Commission: %d%%\n", event.getCommission());
+                System.out.printf("Commission Type: %s\n", event.getCommissionType());
+                System.out.println("Options:");
+                int i = 1;
+                for (String option : event.getOptions()) {
+                    System.out.printf("%d. %s\n", i++, option);
+                }
+                String status = event.getActiveStatus() ? "Active" : "Closed";
+                System.out.printf("Status: %s\n", status);
                 System.out.println("-------------------------");
             }
         } catch (Exception e) {
@@ -101,12 +108,8 @@ public class ConsoleUIEX1 {
 
     private void handleEventTradingStatus() {
         try {
-            // Check if data is loaded before printing the prompt
-            engine.getAllEvents();
-            
             handleDisplayEvents();
-            System.out.print("\nPlease enter the Event ID from the list above: ");
-            
+            System.out.print("Please enter the Event ID from the list above: ");
             int eventId = Integer.parseInt(scanner.nextLine().trim());
             EventDetailsDTO details = engine.getEventDetails(eventId);
             printEventTradingStatus(details);
@@ -119,31 +122,34 @@ public class ConsoleUIEX1 {
 
     private void printEventTradingStatus(EventDetailsDTO details) {
         System.out.println("\n--- Event Trading Status ---");
-        System.out.printf("Event: %s (ID: %d)\n", details.getName(), details.getId());
-        String status = details.getActiveStatus() ? "Active" : "Closed";
-        System.out.printf("Status: %s\n", status);
-        if (!details.getActiveStatus() && details.getWinningOptionName() != null) {
-            System.out.printf("Winning Option: %s\n", details.getWinningOptionName());
+        
+        System.out.println("Current State:");
+        int optIndex = 1;
+        for (OptionDTO option : details.getOptions()) {
+            System.out.printf("  %d. %s - Value: %.2f | Shares Bought: %d\n", 
+                optIndex++, option.getName(), option.getCurrentProbability(), option.getSharesBought());
         }
         
-        System.out.printf("Total Account Balance: %.2f\n", details.getAccountBalance());
+        System.out.printf("Event Account Balance: %.2f\n", details.getAccountBalance());
         System.out.printf("Total Commission Collected: %.2f\n", details.getTotalCommissionCollected());
         
-        System.out.println("\nOptions:");
-        for (OptionDTO option : details.getOptions()) {
-            System.out.printf("- %s (Current Value: %.2f | Shares bought: %d)\n", option.getName(), option.getCurrentProbability(), option.getSharesBought());
+        System.out.println("Trade History:");
+        List<TransactionDTO> txs = details.getTransactions();
+        if (txs.isEmpty()) {
+            System.out.println("  No trades have been made yet.");
+        } else {
+            for (int i = txs.size() - 1; i >= 0; i--) {
+                TransactionDTO tx = txs.get(i);
+                System.out.printf("  Option: %s | Quantity: %d | Paid: %.2f\n", tx.getOptionName(), tx.getQuantity(), tx.getPricePaid());
+            }
         }
         
-        System.out.println("\nTrade History:");
-        if (details.getTransactions().isEmpty()) {
-            System.out.println("No transactions yet.");
-        } else {
-            List<TransactionDTOEX1> txs = details.getTransactions();
-            for (int i = txs.size() - 1; i >= 0; i--) {
-                TransactionDTOEX1 tx = txs.get(i);
-                System.out.printf("Bought %d shares of '%s' for %.2f total\n", 
-                    tx.getQuantity(), tx.getOptionName(), tx.getPricePaid());
+        if (!details.getActiveStatus()) {
+            System.out.println("\nEvent Closed:");
+            for (OptionDTO option : details.getOptions()) {
+                System.out.printf("  %s - Total Shares: %d\n", option.getName(), option.getSharesBought());
             }
+            System.out.printf("Winning Option: %s\n", details.getWinningOptionName());
         }
         System.out.println("----------------------------");
     }
@@ -151,25 +157,25 @@ public class ConsoleUIEX1 {
     private void handleParticipateInEvent() {
         try {
             int eventId = displayActiveEventsAndSelectOne("to participate in");
-            if (eventId == -1) return;
+            if (eventId == -1)
+                return;
 
             EventDetailsDTO details = engine.getEventDetails(eventId);
-            displayEventOptions(details);
-
-            System.out.print("\nEnter your member name: ");
-            String memberName = scanner.nextLine().trim();
-            while (memberName.isEmpty()) {
-                System.out.print("Member name cannot be empty. Please enter your member name: ");
-                memberName = scanner.nextLine().trim();
-            }
+            printEventTradingStatus(details);
 
             System.out.print("Enter the Option Index (1 to " + details.getOptions().size() + "): ");
             int optionIndex = Integer.parseInt(scanner.nextLine().trim());
+            if (optionIndex < 1 || optionIndex > details.getOptions().size()) {
+                throw new Exception("Error: The selected Option Index is not in the active events list.");
+            }
 
             System.out.print("Enter the quantity of shares to buy: ");
             int quantity = Integer.parseInt(scanner.nextLine().trim());
+            if (quantity <= 0) {
+                throw new Exception("Error: Quantity must be a positive number.");
+            }
 
-            ReceiptDTO receipt = engine.buyShares(memberName, eventId, optionIndex - 1, quantity);
+            ReceiptDTO receipt = engine.buyShares("ConsoleUser", eventId, optionIndex - 1, quantity);
             displayReceipt(receipt);
             printEventTradingStatus(receipt.getUpdatedEventStatus());
 
@@ -181,51 +187,66 @@ public class ConsoleUIEX1 {
     }
 
     private int displayActiveEventsAndSelectOne(String actionName) {
-        List<EventSummaryDTO> activeEvents = engine.getActiveEvents();
-        if (activeEvents.isEmpty()) {
-            System.out.println("There are no active events " + actionName + ".");
-            return -1;
-        }
-
-        System.out.println("\n--- Active Events ---");
-        for (EventSummaryDTO event : activeEvents) {
-            System.out.printf("ID: %d | Name: %s\n", event.getId(), event.getName());
-        }
-
-        System.out.print("\nEnter the Event ID from the list above: ");
-        int selectedId = Integer.parseInt(scanner.nextLine().trim());
-        
-        boolean found = false;
-        for (EventSummaryDTO event : activeEvents) {
-            if (event.getId() == selectedId) {
-                found = true;
-                break;
+        try {
+            List<EventSummaryDTO> activeEvents = engine.getActiveEvents();
+            if (activeEvents.isEmpty()) {
+                System.out.println("There are no active events " + actionName + ".");
+                return -1;
             }
-        }
-        
-        if (!found) {
-            System.out.println("Error: The selected Event ID is not in the active events list.");
-            return -1;
-        }
-        
-        return selectedId;
-    }
 
-    private void displayEventOptions(EventDetailsDTO details) {
-        System.out.println("\n--- Current Event Status ---");
-        int i = 1;
-        for (OptionDTO option : details.getOptions()) {
-            System.out.printf("%d. %s (Current Value: %.2f | Shares bought: %d)\n", i++, option.getName(), option.getCurrentProbability(), option.getSharesBought());
+            System.out.println("\n--- Active Events ---");
+            for (EventSummaryDTO event : activeEvents) {
+                System.out.printf("Event ID: %d\n", event.getId());
+                System.out.printf("Name: %s\n", event.getName());
+                System.out.printf("Description: %s\n", event.getDescription());
+                System.out.printf("Commission: %d%%\n", event.getCommission());
+                System.out.printf("Commission Type: %s\n", event.getCommissionType());
+                System.out.println("Options:");
+                int i = 1;
+                for (String option : event.getOptions()) {
+                    System.out.printf("%d. %s\n", i++, option);
+                }
+                System.out.println("Status: Active");
+                System.out.println("-------------------------");
+            }
+
+            System.out.print("\nEnter the Event ID from the list above: ");
+            int selectedId = Integer.parseInt(scanner.nextLine().trim());
+            if (selectedId <= 0) {
+                System.out.println("Error: Event ID must be a positive number.");
+                return -1;
+            }
+
+            boolean found = false;
+            for (EventSummaryDTO event : activeEvents) {
+                if (event.getId() == selectedId) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                System.out.println("Error: The selected Event ID is not in the active events list.");
+                return -1;
+            }
+
+            return selectedId;
+        } catch (NumberFormatException e) {
+            System.out.println("Error: Event ID must be a valid number.");
+            return -1;
+        } catch (Exception e) {
+            System.out.println("Error: " + e.getMessage());
+            return -1;
         }
     }
 
     private void displayReceipt(ReceiptDTO receipt) {
         System.out.println("\n--- Receipt ---");
+        System.out.printf("Total Paid: %.2f\n", receipt.getTotalPaid());
         System.out.printf("Cost of shares: %.2f\n", receipt.getCostOfShares());
-        if (receipt.getCommissionPaid() > 0) {
+        if (receipt.isCommissionApplied()) {
             System.out.printf("Commission Paid: %.2f\n", receipt.getCommissionPaid());
         }
-        System.out.printf("Total Paid: %.2f\n", receipt.getTotalPaid());
         System.out.println("-----------------");
     }
 
@@ -239,7 +260,11 @@ public class ConsoleUIEX1 {
 
             System.out.print("Enter the Winning Option Index (1 to " + details.getOptions().size() + "): ");
             int winningOptionIndex = Integer.parseInt(scanner.nextLine().trim());
-            
+            if (winningOptionIndex < 1 || winningOptionIndex > details.getOptions().size()) {
+                System.out.println("Error: Invalid winning option selection.");
+                return;
+            }
+
             engine.closeEvent(eventId, winningOptionIndex - 1);
             
             System.out.println("Success! Event " + eventId + " has been closed and payouts have been calculated.");

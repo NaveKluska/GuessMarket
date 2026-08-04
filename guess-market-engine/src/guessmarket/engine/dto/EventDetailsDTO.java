@@ -19,7 +19,7 @@ public class EventDetailsDTO
     private final boolean activeStatus;
     private final double accountBalance;
     private final double totalCommissionCollected;
-    private final List<TransactionDTOEX1> transactions;
+    private final List<TransactionDTO> transactions;
     private final String winningOptionName;
 
     public EventDetailsDTO(final Event event)
@@ -53,13 +53,13 @@ public class EventDetailsDTO
         return Collections.unmodifiableList(optionDTOs);
     }
 
-    private static List<TransactionDTOEX1> mapTransactions(final List<Transaction> transactions) {
+    private static List<TransactionDTO> mapTransactions(final List<Transaction> transactions) {
         if (transactions == null) {
             return Collections.emptyList();
         }
-        final List<TransactionDTOEX1> transactionDTOs = new ArrayList<>();
+        final List<TransactionDTO> transactionDTOs = new ArrayList<>();
         for (final Transaction transaction : transactions) {
-            transactionDTOs.add(new TransactionDTOEX1(transaction));
+            transactionDTOs.add(new TransactionDTO(transaction));
         }
         return Collections.unmodifiableList(transactionDTOs);
     }
@@ -109,7 +109,7 @@ public class EventDetailsDTO
         return totalCommissionCollected;
     }
 
-    public List<TransactionDTOEX1> getTransactions()
+    public List<TransactionDTO> getTransactions()
     {
         return transactions;
     }

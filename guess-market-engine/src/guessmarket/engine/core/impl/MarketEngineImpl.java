@@ -10,7 +10,6 @@ import guessmarket.engine.models.Option;
 import guessmarket.engine.models.Transaction;
 import guessmarket.engine.billing.api.CommissionCalculator;
 import guessmarket.engine.parsing.api.FileParser;
-import guessmarket.engine.pricing.api.PricingModel;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -24,16 +23,16 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class MarketEngineImpl implements MarketEngine
 {
+    public static final double COST_OF_SHARE = 1.0;
+    
     private final Map<Integer, Event> events;
     private final FileParser parser;
-    private final PricingModel pricingModel;
     private final CommissionCalculator commissionCalculator;
     private boolean isDataLoaded;
 
-    public MarketEngineImpl(final FileParser parser, final PricingModel pricingModel, final CommissionCalculator commissionCalculator)
+    public MarketEngineImpl(final FileParser parser, final CommissionCalculator commissionCalculator)
     {
         this.parser = parser;
-        this.pricingModel = pricingModel;
         this.commissionCalculator = commissionCalculator;
         this.events = new ConcurrentHashMap<>();
         this.isDataLoaded = false;
@@ -42,10 +41,13 @@ public class MarketEngineImpl implements MarketEngine
     @Override
     public void loadData(String filePath) throws Exception
     {
+        if (!isPathOnlyEnglishCharactersAndStandardSymbols(filePath)) {
+            throw new IllegalArgumentException("Error: Only English characters and standard path symbols are allowed in the file path.");
+        }
         final List<Event> loadedEvents = parser.parse(filePath);
-        events.clear();
+        this.events.clear();
         for (final Event event : loadedEvents) {
-            events.put(event.getId(), event);
+            this.events.put(event.getId(), event);
         }
         this.isDataLoaded = true;
     }
@@ -59,7 +61,7 @@ public class MarketEngineImpl implements MarketEngine
 
         final List<EventSummaryDTO> result = new ArrayList<>();
 
-        for (final Event event : events.values())
+        for (final Event event : this.events.values())
         {
             final EventSummaryDTO eventSummary = new EventSummaryDTO(event);
             result.add(eventSummary);
@@ -77,7 +79,7 @@ public class MarketEngineImpl implements MarketEngine
 
         final List<EventSummaryDTO> result = new ArrayList<>();
 
-        for (final Event event : events.values())
+        for (final Event event : this.events.values())
         {
             if (event.getActiveStatus())
             {
@@ -96,7 +98,7 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
         }
 
-        final Event event = events.get(eventId);
+        final Event event = this.events.get(eventId);
         if (event == null) {
             throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
         }
@@ -109,6 +111,7 @@ public class MarketEngineImpl implements MarketEngine
         if (!isDataLoaded) {
             throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
         }
+
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be positive.");
         }
@@ -132,7 +135,7 @@ public class MarketEngineImpl implements MarketEngine
 
             event.executePurchase(memberName, optionIndex, quantity, cost, commission);
 
-            return new ReceiptDTO(cost, commission, cost + commission, new EventDetailsDTO(event));
+            return new ReceiptDTO(cost, commission, cost + commission, event.getCommissionType() == CommissionType.ON_PURCHASE, new EventDetailsDTO(event));
         }
     }
 
@@ -157,19 +160,15 @@ public class MarketEngineImpl implements MarketEngine
                 throw new IllegalArgumentException("Invalid winning option selection.");
             }
 
-            // 1. Close the event so no one can buy shares anymore
             final Option winningOption = event.getOptions().get(winningOptionIndex);
             event.deactivateEvent(winningOptionIndex);
 
-            // 2. Calculate payouts and final commissions
             for (final Transaction transaction : event.getTransactions()) {
                 if (transaction.getOptionName().equals(winningOption.getName())) {
-                    final double winAmount = transaction.getQuantity() * 1.0; 
+                    final double winAmount = transaction.getQuantity() * COST_OF_SHARE; 
                     final double commission = commissionCalculator.calculate(winAmount, event.getCommission(), event.getCommissionType(), CommissionType.ON_CLOSE);
                     
-                    if (commission > 0) {
-                        event.collectCommission(commission);
-                    }
+                    event.collectCommission(commission);
                     event.deductFromBalance(winAmount - commission);
                 }
             }
@@ -179,6 +178,9 @@ public class MarketEngineImpl implements MarketEngine
     @Override
     public void saveState(final String filePath) throws Exception
     {
+        if (!isPathOnlyEnglishCharactersAndStandardSymbols(filePath)) {
+            throw new IllegalArgumentException("Error: Only English characters and standard path symbols are allowed in the file path.");
+        }
         if (!isDataLoaded) {
             throw new IllegalStateException("No data is currently loaded to save.");
         }
@@ -192,6 +194,9 @@ public class MarketEngineImpl implements MarketEngine
     @Override
     public void loadState(final String filePath) throws Exception
     {
+        if (!isPathOnlyEnglishCharactersAndStandardSymbols(filePath)) {
+            throw new IllegalArgumentException("Error: Only English characters and standard path symbols are allowed in the file path.");
+        }
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filePath + ".dat"))) {
             Map<Integer, Event> loaded = (Map<Integer, Event>) ois.readObject();
             events.clear();
@@ -204,5 +209,15 @@ public class MarketEngineImpl implements MarketEngine
     public void shutdown() throws Exception
     {
         // TODO: Implement shutdown/save logic
+    }
+
+    private boolean isPathOnlyEnglishCharactersAndStandardSymbols(String path) {
+        for (char c : path.toCharArray()) {
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || 
+                  c == '\\' || c == '/' || c == '.' || c == ':' || c == '_' || c == '-' || c == ' ')) {
+                return false;
+            }
+        }
+        return true;
     }
 }
