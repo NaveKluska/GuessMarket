@@ -19,9 +19,9 @@ import java.util.List;
 import java.util.Set;
 
 // To be clear: There are places where i limit my self to a specific number of options like only 2 options and only LMSR
-// Will definitely not work well for EX2!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// Will definitely not work well for EX2!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-public class EX1_XMLFileParser implements FileParser {
+public class EX1_DOM_XMLFileParser implements FileParser {
 
     private static final int COMMISSION_VALUE_MAX = 90;
     private static final int COMMISSION_VALUE_MIN = 0;
