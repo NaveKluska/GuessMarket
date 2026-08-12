@@ -8,6 +8,7 @@ import guessmarket.engine.billing.impl.StandardCommissionCalculator;
 import guessmarket.engine.parsing.api.FileParser;
 import guessmarket.engine.parsing.impl.EX1_DOM_XMLFileParser;
 import guessmarket.engine.parsing.impl.EX1_XPath_XMLFileParser;
+import guessmarket.engine.parsing.impl.EX1_JAXB_XMLFileParser;
 
 public class GuessMarketConsoleAppEX1 {
     
@@ -15,11 +16,12 @@ public class GuessMarketConsoleAppEX1 {
 
     public GuessMarketConsoleAppEX1() {
         //FileParser parser = new EX1_DOM_XMLFileParser();
-        FileParser parser = new EX1_XPath_XMLFileParser();
+        //FileParser parser = new EX1_XPath_XMLFileParser();
+        FileParser parser = new EX1_JAXB_XMLFileParser();
         CommissionCalculator commissionCalculator = new StandardCommissionCalculator();
-        
+
         MarketEngine engine = new MarketEngineImpl(parser, commissionCalculator);
-        
+
         this.ui = new ConsoleUIEX1(engine);
     }
 
