@@ -1,9 +1,11 @@
 package guessmarket.engine.core.impl;
 
 import guessmarket.engine.core.api.MarketEngine;
-import guessmarket.engine.dto.EventDetailsDTO;
-import guessmarket.engine.dto.EventSummaryDTO;
-import guessmarket.engine.dto.ReceiptDTO;
+import guessmarket.dto.EventDetailsDTO;
+import guessmarket.dto.EventSummaryDTO;
+import guessmarket.dto.OptionDTO;
+import guessmarket.dto.ReceiptDTO;
+import guessmarket.dto.TransactionDTO;
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
 import guessmarket.engine.models.Option;
@@ -63,8 +65,7 @@ public class MarketEngineImpl implements MarketEngine
 
         for (final Event event : this.events.values())
         {
-            final EventSummaryDTO eventSummary = new EventSummaryDTO(event);
-            result.add(eventSummary);
+            result.add(mapToSummaryDTO(event));
         }
 
         return Collections.unmodifiableList(result);
@@ -83,8 +84,7 @@ public class MarketEngineImpl implements MarketEngine
         {
             if (event.getActiveStatus())
             {
-                final EventSummaryDTO eventSummary = new EventSummaryDTO(event);
-                result.add(eventSummary);
+                result.add(mapToSummaryDTO(event));
             }
         }
 
@@ -102,7 +102,7 @@ public class MarketEngineImpl implements MarketEngine
         if (event == null) {
             throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
         }
-        return new EventDetailsDTO(event);
+        return mapToDetailsDTO(event);
     }
 
     @Override
@@ -135,7 +135,7 @@ public class MarketEngineImpl implements MarketEngine
 
             event.executePurchase(memberName, optionIndex, quantity, cost, commission);
 
-            return new ReceiptDTO(cost, commission, cost + commission, event.getCommissionType() == CommissionType.ON_PURCHASE, new EventDetailsDTO(event));
+            return new ReceiptDTO(cost, commission, cost + commission, event.getCommissionType() == CommissionType.ON_PURCHASE, mapToDetailsDTO(event));
         }
     }
 
@@ -151,26 +151,24 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
         }
 
-        synchronized (event) {
-            if (!event.getActiveStatus()) {
-                throw new IllegalArgumentException("Event is already closed.");
-            }
+        if (!event.getActiveStatus()) {
+            throw new IllegalArgumentException("Event is already closed.");
+        }
 
-            if (winningOptionIndex < 0 || winningOptionIndex >= event.getOptions().size()) {
-                throw new IllegalArgumentException("Invalid winning option selection.");
-            }
+        if (winningOptionIndex < 0 || winningOptionIndex >= event.getOptions().size()) {
+            throw new IllegalArgumentException("Invalid winning option selection.");
+        }
 
-            final Option winningOption = event.getOptions().get(winningOptionIndex);
-            event.deactivateEvent(winningOptionIndex);
+        final Option winningOption = event.getOptions().get(winningOptionIndex);
+        event.deactivateEvent(winningOptionIndex);
 
-            for (final Transaction transaction : event.getTransactions()) {
-                if (transaction.getOptionName().equals(winningOption.getName())) {
-                    final double winAmount = transaction.getQuantity() * COST_OF_SHARE; 
-                    final double commission = commissionCalculator.calculate(winAmount, event.getCommission(), event.getCommissionType(), CommissionType.ON_CLOSE);
+        for (final Transaction transaction : event.getTransactions()) {
+            if (transaction.getOptionName().equals(winningOption.getName())) {
+                final double winAmount = transaction.getQuantity() * COST_OF_SHARE; 
+                final double commission = commissionCalculator.calculate(transaction.getPricePaid(), event.getCommission(), event.getCommissionType(), CommissionType.ON_CLOSE);
                     
-                    event.collectCommission(commission);
-                    event.deductFromBalance(winAmount - commission);
-                }
+                event.collectCommission(commission);
+                event.deductFromBalance(winAmount - commission);
             }
         }
     }
@@ -209,6 +207,62 @@ public class MarketEngineImpl implements MarketEngine
     public void shutdown() throws Exception
     {
         // TODO: Implement shutdown/save logic
+    }
+
+    // ---- DTO Mapping Helpers ----
+
+    private EventSummaryDTO mapToSummaryDTO(final Event event) {
+        final List<String> optionNames = new ArrayList<>();
+        for (final Option option : event.getOptions()) {
+            optionNames.add(option.getName());
+        }
+
+        return new EventSummaryDTO(
+            event.getId(),
+            event.getName(),
+            event.getActiveStatus(),
+            event.getCommission(),
+            event.getCommissionType().name(),
+            event.getDescription(),
+            Collections.unmodifiableList(optionNames)
+        );
+    }
+
+    private EventDetailsDTO mapToDetailsDTO(final Event event) {
+        final List<OptionDTO> optionDTOs = new ArrayList<>();
+        final List<Option> options = event.getOptions();
+        if (options != null) {
+            for (int i = 0; i < options.size(); i++) {
+                Option option = options.get(i);
+                double prob = event.getOptionProbability(i);
+                optionDTOs.add(new OptionDTO(option.getName(), option.getSharesBought(), prob));
+            }
+        }
+
+        final List<TransactionDTO> transactionDTOs = new ArrayList<>();
+        final List<Transaction> transactions = event.getTransactions();
+        if (transactions != null) {
+            for (final Transaction tx : transactions) {
+                transactionDTOs.add(new TransactionDTO(
+                    tx.getUserName(), tx.getOptionName(), tx.getQuantity(),
+                    tx.getPricePaid(), tx.getTimestamp()
+                ));
+            }
+        }
+
+        return new EventDetailsDTO(
+            event.getId(),
+            event.getName(),
+            event.getDescription(),
+            event.getCommission(),
+            event.getCommissionType().name(),
+            event.getActiveStatus(),
+            event.getAccountBalance(),
+            event.getTotalCommissionCollected(),
+            Collections.unmodifiableList(optionDTOs),
+            Collections.unmodifiableList(transactionDTOs),
+            event.getWinningOptionName()
+        );
     }
 
     private boolean isPathOnlyEnglishCharactersAndStandardSymbols(String path) {

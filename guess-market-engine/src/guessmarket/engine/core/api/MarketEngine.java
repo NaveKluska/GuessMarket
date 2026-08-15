@@ -1,8 +1,8 @@
 package guessmarket.engine.core.api;
 
-import guessmarket.engine.dto.EventDetailsDTO;
-import guessmarket.engine.dto.EventSummaryDTO;
-import guessmarket.engine.dto.ReceiptDTO;
+import guessmarket.dto.EventDetailsDTO;
+import guessmarket.dto.EventSummaryDTO;
+import guessmarket.dto.ReceiptDTO;
 
 import java.util.List;
 

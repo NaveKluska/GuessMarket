@@ -1,11 +1,11 @@
 package guessmarket.console.ui;
 
 import guessmarket.engine.core.api.MarketEngine;
-import guessmarket.engine.dto.EventDetailsDTO;
-import guessmarket.engine.dto.EventSummaryDTO;
-import guessmarket.engine.dto.OptionDTO;
-import guessmarket.engine.dto.ReceiptDTO;
-import guessmarket.engine.dto.TransactionDTO;
+import guessmarket.dto.EventDetailsDTO;
+import guessmarket.dto.EventSummaryDTO;
+import guessmarket.dto.OptionDTO;
+import guessmarket.dto.ReceiptDTO;
+import guessmarket.dto.TransactionDTO;
 import java.util.List;
 import java.util.Scanner;
 
@@ -140,7 +140,7 @@ public class ConsoleUIEX1 {
         } else {
             for (int i = txs.size() - 1; i >= 0; i--) {
                 TransactionDTO tx = txs.get(i);
-                System.out.printf("  Option: %s | Quantity: %d | Paid: %.2f\n", tx.getOptionName(), tx.getQuantity(), tx.getPricePaid());
+                System.out.printf("  %d. Option: %s | Quantity: %d | Paid: %.2f\n", (i + 1), tx.getOptionName(), tx.getQuantity(), tx.getPricePaid());
             }
         }
         

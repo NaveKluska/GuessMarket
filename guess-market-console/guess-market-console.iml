@@ -8,6 +8,7 @@
     <orderEntry type="jdk" jdkName="25" jdkType="JavaSDK" />
     <orderEntry type="module" module-name="guess-market-engine" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module" module-name="guess-market-dto" />
     <orderEntry type="module-library">
       <library>
         <CLASSES>
