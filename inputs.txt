@@ -1,0 +1,61 @@
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\valid\01_basic_two_events.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\valid\02_commission_zero.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\valid\03_commission_ninety.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\valid\04_single_event.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\valid\05_many_events.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\valid\06_negative_id.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\valid\07_large_b.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\valid\08_whitespace_and_case.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\valid\09_duplicate_event_names_allowed.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\valid\10_option_case_variants.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\01_commission_over_90.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\02_commission_negative.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\03_duplicate_event_ids.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\04_only_one_option.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\05_three_options.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\06_duplicate_option_names_case_insensitive.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\07_b_zero.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\08_b_negative.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\09_missing_description.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\10_missing_id.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\11_invalid_commission_type_value.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\12_non_numeric_commission.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\13_non_numeric_b.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\14_empty_options.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\15_malformed_unclosed_tag.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\16_empty_file.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\17_not_xml_content.txt
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\18_wrong_root_element.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\19_missing_method.xml
+1
+C:\Users\navek\GitHub projects\GuessMarket\gm_ex1_test_xmls\gm_ex1_test_xmls\invalid\20_no_events_at_all.xml
+8

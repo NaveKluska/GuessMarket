@@ -1,0 +1,39 @@
+<Guess-Market>
+  <GM-events>
+    <GM-event name="Event A">
+      <id>1</id>
+      <description>Description A</description>
+      <comision type="on-purchase">5</comision>
+      <GM-options><GM-option>Yes</GM-option><GM-option>No</GM-option></GM-options>
+      <GM-method><GM-LMSR><b>10</b></GM-LMSR></GM-method>
+    </GM-event>
+    <GM-event name="Event B">
+      <id>2</id>
+      <description>Description B</description>
+      <comision type="on-close">10</comision>
+      <GM-options><GM-option>Yes</GM-option><GM-option>No</GM-option></GM-options>
+      <GM-method><GM-LMSR><b>20</b></GM-LMSR></GM-method>
+    </GM-event>
+    <GM-event name="Event C">
+      <id>3</id>
+      <description>Description C</description>
+      <comision type="on-purchase">15</comision>
+      <GM-options><GM-option>Yes</GM-option><GM-option>No</GM-option></GM-options>
+      <GM-method><GM-LMSR><b>30</b></GM-LMSR></GM-method>
+    </GM-event>
+    <GM-event name="Event D">
+      <id>4</id>
+      <description>Description D</description>
+      <comision type="on-close">20</comision>
+      <GM-options><GM-option>Yes</GM-option><GM-option>No</GM-option></GM-options>
+      <GM-method><GM-LMSR><b>40</b></GM-LMSR></GM-method>
+    </GM-event>
+    <GM-event name="Event E">
+      <id>5</id>
+      <description>Description E</description>
+      <comision type="on-purchase">25</comision>
+      <GM-options><GM-option>Yes</GM-option><GM-option>No</GM-option></GM-options>
+      <GM-method><GM-LMSR><b>50</b></GM-LMSR></GM-method>
+    </GM-event>
+  </GM-events>
+</Guess-Market>

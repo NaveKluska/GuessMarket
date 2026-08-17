@@ -1,0 +1,2 @@
+This is just a plain text file, renamed with a .txt extension.
+It should be rejected purely because the path does not end with ".xml".

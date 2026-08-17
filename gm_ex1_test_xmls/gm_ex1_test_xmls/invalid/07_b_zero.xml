@@ -1,0 +1,11 @@
+<Guess-Market>
+  <GM-events>
+    <GM-event name="Zero Liquidity Event">
+      <id>1</id>
+      <description>b must be a positive whole number; here it is 0.</description>
+      <comision type="on-purchase">10</comision>
+      <GM-options><GM-option>Yes</GM-option><GM-option>No</GM-option></GM-options>
+      <GM-method><GM-LMSR><b>0</b></GM-LMSR></GM-method>
+    </GM-event>
+  </GM-events>
+</Guess-Market>

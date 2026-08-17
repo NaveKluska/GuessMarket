@@ -65,9 +65,8 @@ public class EX1_JAXB_XMLFileParser implements FileParser {
         List<Event> parsedEvents = new ArrayList<>();
         Set<Integer> parsedIds = new HashSet<>();
 
-        if (guessMarket.getGMEvents() == null || guessMarket.getGMEvents().getGMEvent() == null) {
-            // return an empty list
-            return parsedEvents;
+        if (guessMarket.getGMEvents() == null || guessMarket.getGMEvents().getGMEvent() == null || guessMarket.getGMEvents().getGMEvent().isEmpty()) {
+            throw new IllegalArgumentException("Error: File must contain at least one GM-event!");
         }
 
         int index = 1;
@@ -87,8 +86,15 @@ public class EX1_JAXB_XMLFileParser implements FileParser {
     private Event parseEvent(GMEvent gmEvent) {
         int id = gmEvent.getId();
 
-        String name = gmEvent.getName() != null ? String.join(" ", gmEvent.getName()) : "";
+        String name = gmEvent.getName() != null ? String.join(" ", gmEvent.getName()).trim() : "";
+        if (name.isEmpty()) {
+            throw new IllegalArgumentException("Error in Event " + id + ": Event name cannot be empty!");
+        }
+        
         String description = gmEvent.getDescription() != null ? gmEvent.getDescription().trim() : "";
+        if (description.isEmpty()) {
+            throw new IllegalArgumentException("Error in Event " + id + ": Event description cannot be empty!");
+        }
         
         int commissionValue = parseCommissionValue(gmEvent.getComision(), id);
         CommissionType commissionType = parseCommissionType(gmEvent.getComision(), id);
@@ -137,7 +143,7 @@ public class EX1_JAXB_XMLFileParser implements FileParser {
 
     private List<Option> parseOptions(GMEvent gmEvent, int eventId) {
         if (gmEvent.getGMOptions() == null || gmEvent.getGMOptions().getGMOption() == null) {
-            return new ArrayList<>();
+            throw new IllegalArgumentException("Error in Event " + eventId + ": GM-options must have exactly two GM-option elements!");
         }
 
         List<Option> options = new ArrayList<>();
@@ -145,10 +151,17 @@ public class EX1_JAXB_XMLFileParser implements FileParser {
 
         for (String optionNameRaw : gmEvent.getGMOptions().getGMOption()) {
             String optionName = optionNameRaw.trim();
+            if (optionName.isEmpty()) {
+                throw new IllegalArgumentException("Error in Event " + eventId + ": GM-option must have a name!");
+            }
             if (!optionNames.add(optionName.toLowerCase())) {
                 throw new IllegalArgumentException("Error in Event " + eventId + ": Duplicate option name found ('" + optionName + "')!");
             }
             options.add(new Option(optionName));
+        }
+
+        if (options.size() != 2) {
+            throw new IllegalArgumentException("Error in Event " + eventId + ": GM-options must have exactly two GM-option elements!");
         }
 
         return options;

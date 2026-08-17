@@ -1,0 +1,14 @@
+<Guess-Market>
+  <GM-events>
+    <GM-event name="Weird Casing Options">
+      <id>1</id>
+      <description>Options with unusual casing but not duplicated - should be valid.</description>
+      <comision type="on-purchase">10</comision>
+      <GM-options>
+        <GM-option>YES</GM-option>
+        <GM-option>no</GM-option>
+      </GM-options>
+      <GM-method><GM-LMSR><b>10</b></GM-LMSR></GM-method>
+    </GM-event>
+  </GM-events>
+</Guess-Market>

@@ -1,0 +1,18 @@
+<Guess-Market>
+  <GM-events>
+    <GM-event name="Same Name">
+      <id>1</id>
+      <description>Name uniqueness is NOT required in EX1 (only id must be unique) - this file should load successfully.</description>
+      <comision type="on-purchase">10</comision>
+      <GM-options><GM-option>Yes</GM-option><GM-option>No</GM-option></GM-options>
+      <GM-method><GM-LMSR><b>10</b></GM-LMSR></GM-method>
+    </GM-event>
+    <GM-event name="Same Name">
+      <id>2</id>
+      <description>Second event, same name as the first, but different id - should still be valid in EX1.</description>
+      <comision type="on-close">20</comision>
+      <GM-options><GM-option>Yes</GM-option><GM-option>No</GM-option></GM-options>
+      <GM-method><GM-LMSR><b>20</b></GM-LMSR></GM-method>
+    </GM-event>
+  </GM-events>
+</Guess-Market>

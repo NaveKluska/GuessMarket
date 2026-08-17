@@ -9,7 +9,7 @@ public class LmsrEvent extends Event {
     public LmsrEvent(int id, String name, String description, int commission, CommissionType commissionType, List<Option> options, int b) {
         super(id, name, description, commission, commissionType, options);
         this.b = b;
-        this.accountBalance = b * Math.log(options.size());
+        this.accountBalance = 0.0;
     }
 
     public int getB() {

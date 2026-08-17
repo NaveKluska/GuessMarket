@@ -224,7 +224,7 @@ public class MarketEngineImpl implements MarketEngine
             event.getCommission(),
             event.getCommissionType().name(),
             event.getDescription(),
-            Collections.unmodifiableList(optionNames)
+            optionNames
         );
     }
 
@@ -259,8 +259,8 @@ public class MarketEngineImpl implements MarketEngine
             event.getActiveStatus(),
             event.getAccountBalance(),
             event.getTotalCommissionCollected(),
-            Collections.unmodifiableList(optionDTOs),
-            Collections.unmodifiableList(transactionDTOs),
+            optionDTOs,
+            transactionDTOs,
             event.getWinningOptionName()
         );
     }

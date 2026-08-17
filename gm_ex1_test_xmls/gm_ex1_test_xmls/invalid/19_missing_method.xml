@@ -1,0 +1,10 @@
+<Guess-Market>
+  <GM-events>
+    <GM-event name="No Method Event">
+      <id>1</id>
+      <description>GM-method element is missing entirely.</description>
+      <comision type="on-purchase">10</comision>
+      <GM-options><GM-option>Yes</GM-option><GM-option>No</GM-option></GM-options>
+    </GM-event>
+  </GM-events>
+</Guess-Market>

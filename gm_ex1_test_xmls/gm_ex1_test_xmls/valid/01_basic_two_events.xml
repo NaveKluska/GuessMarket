@@ -1,0 +1,32 @@
+<Guess-Market>
+  <GM-events>
+    <GM-event name="Earth Quake on Dead Sea">
+      <id>1</id>
+      <description>Will there be an earth quake at the Dead Sea before the end of the year?</description>
+      <comision type="on-purchase">10</comision>
+      <GM-options>
+        <GM-option>Yes</GM-option>
+        <GM-option>No</GM-option>
+      </GM-options>
+      <GM-method>
+        <GM-LMSR>
+          <b>100</b>
+        </GM-LMSR>
+      </GM-method>
+    </GM-event>
+    <GM-event name="Rain Tomorrow">
+      <id>2</id>
+      <description>Will it rain tomorrow in Tel Aviv?</description>
+      <comision type="on-close">25</comision>
+      <GM-options>
+        <GM-option>Yes</GM-option>
+        <GM-option>No</GM-option>
+      </GM-options>
+      <GM-method>
+        <GM-LMSR>
+          <b>50</b>
+        </GM-LMSR>
+      </GM-method>
+    </GM-event>
+  </GM-events>
+</Guess-Market>
