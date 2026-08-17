@@ -1,6 +1,6 @@
 <component name="ArtifactManager">
   <artifact type="jar" name="guess-market-dto:jar">
-    <output-path>$PROJECT_DIR$/out/artifacts/guess_market_dto_jar</output-path>
+    <output-path>$PROJECT_DIR$/out/artifacts</output-path>
     <root id="archive" name="guess-market-dto.jar">
       <element id="module-output" name="guess-market-dto" />
     </root>

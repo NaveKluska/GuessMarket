@@ -82,7 +82,7 @@ public class ConsoleUIEX1 {
         }
     }
 
-    private void handleDisplayEvents() {
+    private boolean handleDisplayEvents() {
         try {
             List<EventSummaryDTO> events = engine.getAllEvents();
             System.out.println("\n--- All System Events ---");
@@ -101,14 +101,18 @@ public class ConsoleUIEX1 {
                 System.out.printf("Status: %s\n", status);
                 System.out.println("-------------------------");
             }
+            return true;
         } catch (Exception e) {
             System.out.println("Error: " + e.getMessage());
+            return false;
         }
     }
 
     private void handleEventTradingStatus() {
         try {
-            handleDisplayEvents();
+            if (!handleDisplayEvents()) {
+                return;
+            }
             System.out.print("Please enter the Event ID from the list above: ");
             int eventId = Integer.parseInt(scanner.nextLine().trim());
             EventDetailsDTO details = engine.getEventDetails(eventId);
@@ -164,23 +168,31 @@ public class ConsoleUIEX1 {
             printEventTradingStatus(details);
 
             System.out.print("Enter the Option Index (1 to " + details.getOptions().size() + "): ");
-            int optionIndex = Integer.parseInt(scanner.nextLine().trim());
+            int optionIndex;
+            try {
+                optionIndex = Integer.parseInt(scanner.nextLine().trim());
+            } catch (NumberFormatException e) {
+                throw new Exception("Option Index must be a valid integer number.");
+            }
             if (optionIndex < 1 || optionIndex > details.getOptions().size()) {
-                throw new Exception("Error: The selected Option Index is not in the active events list.");
+                throw new Exception("The selected Option Index is not in the active events list.");
             }
 
             System.out.print("Enter the quantity of shares to buy: ");
-            int quantity = Integer.parseInt(scanner.nextLine().trim());
+            int quantity;
+            try {
+                quantity = Integer.parseInt(scanner.nextLine().trim());
+            } catch (NumberFormatException e) {
+                throw new Exception("Quantity must be a valid positive integer number. Value might be too large.");
+            }
             if (quantity <= 0) {
-                throw new Exception("Error: Quantity must be a positive number.");
+                throw new Exception("Quantity must be a positive number.");
             }
 
             ReceiptDTO receipt = engine.buyShares("ConsoleUser", eventId, optionIndex - 1, quantity);
             displayReceipt(receipt);
             printEventTradingStatus(receipt.getUpdatedEventStatus());
 
-        } catch (NumberFormatException e) {
-            System.out.println("Error: Please enter valid numbers for ID, Option Index, and Quantity.");
         } catch (Exception e) {
             System.out.println("Error during purchase: " + e.getMessage());
         }
@@ -259,10 +271,14 @@ public class ConsoleUIEX1 {
             printEventTradingStatus(details);
 
             System.out.print("Enter the Winning Option Index (1 to " + details.getOptions().size() + "): ");
-            int winningOptionIndex = Integer.parseInt(scanner.nextLine().trim());
+            int winningOptionIndex;
+            try {
+                winningOptionIndex = Integer.parseInt(scanner.nextLine().trim());
+            } catch (NumberFormatException e) {
+                throw new Exception("Winning Option Index must be a valid integer number.");
+            }
             if (winningOptionIndex < 1 || winningOptionIndex > details.getOptions().size()) {
-                System.out.println("Error: Invalid winning option selection.");
-                return;
+                throw new Exception("Invalid winning option selection.");
             }
 
             engine.closeEvent(eventId, winningOptionIndex - 1);
@@ -272,8 +288,6 @@ public class ConsoleUIEX1 {
             EventDetailsDTO finalDetails = engine.getEventDetails(eventId);
             printEventTradingStatus(finalDetails);
             
-        } catch (NumberFormatException e) {
-            System.out.println("Error: Please enter valid numbers for ID and Winning Option.");
         } catch (Exception e) {
             System.out.println("Error closing event: " + e.getMessage());
         }

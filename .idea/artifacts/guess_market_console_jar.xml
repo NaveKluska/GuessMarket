@@ -1,17 +1,22 @@
 <component name="ArtifactManager">
-  <artifact type="jar" name="guess-market-console:jar">
-    <output-path>$PROJECT_DIR$/out/artifacts/guess_market_console_jar</output-path>
-    <root id="archive" name="guess-market-console.jar">
-      <element id="module-output" name="guess-market-dto" />
-      <element id="module-output" name="guess-market-engine" />
-      <element id="module-output" name="guess-market-console" />
-      <element id="extracted-dir" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jaxb-jxc.jar" path-in-jar="/" />
-      <element id="extracted-dir" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jaxb-xjc.jar" path-in-jar="/" />
-      <element id="extracted-dir" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jaxb-core.jar" path-in-jar="/" />
-      <element id="extracted-dir" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jaxb-impl.jar" path-in-jar="/" />
-      <element id="extracted-dir" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/angus-activation.jar" path-in-jar="/" />
-      <element id="extracted-dir" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jakarta.xml.bind-api.jar" path-in-jar="/" />
-      <element id="extracted-dir" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jakarta.activation-api.jar" path-in-jar="/" />
+  <artifact name="guess-market-console:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts</output-path>
+    <root id="root">
+      <element id="archive" name="guess-market-console.jar">
+        <element id="directory" name="META-INF">
+          <element id="file-copy" path="$PROJECT_DIR$/guess-market-console/src/META-INF/MANIFEST.MF" />
+        </element>
+        <element id="module-output" name="guess-market-dto" />
+        <element id="module-output" name="guess-market-engine" />
+        <element id="module-output" name="guess-market-console" />
+      </element>
+      <element id="file-copy" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jaxb-jxc.jar" />
+      <element id="file-copy" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jaxb-xjc.jar" />
+      <element id="file-copy" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jaxb-core.jar" />
+      <element id="file-copy" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jaxb-impl.jar" />
+      <element id="file-copy" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/angus-activation.jar" />
+      <element id="file-copy" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jakarta.xml.bind-api.jar" />
+      <element id="file-copy" path="$PROJECT_DIR$/jaxb-ri-4.0.5/mod/jakarta.activation-api.jar" />
     </root>
   </artifact>
 </component>

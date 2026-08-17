@@ -121,22 +121,20 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
         }
 
-        synchronized (event) {
-            if (!event.getActiveStatus()) {
-                throw new IllegalArgumentException("Cannot buy shares for a closed event.");
-            }
-
-            if (optionIndex < 0 || optionIndex >= event.getOptions().size()) {
-                throw new IllegalArgumentException("Invalid option selection.");
-            }
-
-            final double cost = event.calculateCost(optionIndex, quantity);
-            final double commission = commissionCalculator.calculate(cost, event.getCommission(), event.getCommissionType(), CommissionType.ON_PURCHASE);
-
-            event.executePurchase(memberName, optionIndex, quantity, cost, commission);
-
-            return new ReceiptDTO(cost, commission, cost + commission, event.getCommissionType() == CommissionType.ON_PURCHASE, mapToDetailsDTO(event));
+        if (!event.getActiveStatus()) {
+            throw new IllegalArgumentException("Cannot buy shares for a closed event.");
         }
+
+        if (optionIndex < 0 || optionIndex >= event.getOptions().size()) {
+            throw new IllegalArgumentException("Invalid option selection.");
+        }
+
+        final double cost = event.calculateCost(optionIndex, quantity);
+        final double commission = commissionCalculator.calculate(cost, event.getCommission(), event.getCommissionType(), CommissionType.ON_PURCHASE);
+
+        event.executePurchase(memberName, optionIndex, quantity, cost, commission);
+
+        return new ReceiptDTO(cost, commission, cost + commission, event.getCommissionType() == CommissionType.ON_PURCHASE, mapToDetailsDTO(event));
     }
 
     @Override
