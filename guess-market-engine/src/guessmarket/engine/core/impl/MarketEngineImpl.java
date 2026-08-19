@@ -18,7 +18,6 @@ import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,7 +67,7 @@ public class MarketEngineImpl implements MarketEngine
             result.add(mapToSummaryDTO(event));
         }
 
-        return Collections.unmodifiableList(result);
+        return result;
     }
 
     @Override
@@ -88,7 +87,7 @@ public class MarketEngineImpl implements MarketEngine
             }
         }
 
-        return Collections.unmodifiableList(result);
+        return result;
     }
 
     @Override
@@ -218,11 +217,11 @@ public class MarketEngineImpl implements MarketEngine
         return new EventSummaryDTO(
             event.getId(),
             event.getName(),
-            event.getActiveStatus(),
+            event.getDescription(),
             event.getCommission(),
             event.getCommissionType().name(),
-            event.getDescription(),
-            optionNames
+            optionNames,
+            event.getActiveStatus()
         );
     }
 

@@ -6,21 +6,21 @@ public class EventSummaryDTO
 {
     private final int id;
     private final String name;
-    private final boolean activeStatus;
+    private final String description;
     private final int commission;
     private final String commissionType;
-    private final String description;
     private final List<String> options;
+    private final boolean activeStatus;
 
-    public EventSummaryDTO(final int id, final String name, final boolean activeStatus, final int commission, final String commissionType, final String description, final List<String> options)
+    public EventSummaryDTO(final int id, final String name, final String description, final int commission, final String commissionType, final List<String> options, final boolean activeStatus)
     {
         this.id = id;
         this.name = name;
-        this.activeStatus = activeStatus;
+        this.description = description;
         this.commission = commission;
         this.commissionType = commissionType;
-        this.description = description;
         this.options = options;
+        this.activeStatus = activeStatus;
     }
 
     public int getId()

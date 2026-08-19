@@ -108,6 +108,9 @@ public abstract class Event implements Serializable
         this.winningOptionName = options.get(winningOptionIndex).getName();
     }
 
+    // TODO: For better encapsulation, this method should throw an IllegalStateException if activeStatus is true.
+    // Implementing this requires updating MarketEngineImpl.mapToDetailsDTO to check getActiveStatus() 
+    // before calling this method, otherwise the engine will crash when mapping active events.
     public String getWinningOptionName() {
         return winningOptionName;
     }

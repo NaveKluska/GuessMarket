@@ -2,7 +2,6 @@ package guessmarket.engine.billing.impl;
 
 import guessmarket.engine.billing.api.CommissionCalculator;
 import guessmarket.engine.models.CommissionType;
-import guessmarket.engine.models.Event;
 
 public class StandardCommissionCalculator implements CommissionCalculator {
     @Override
