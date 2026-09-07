@@ -13,5 +13,5 @@ public interface FileParser {
     /**
      * Parses the file at the given path and returns a list of events.
      */
-    List<Event> parse(String filePath) throws Exception;
+    ParsedMarketData parse(String filePath) throws Exception;
 }

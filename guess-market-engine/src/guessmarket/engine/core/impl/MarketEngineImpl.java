@@ -45,7 +45,8 @@ public class MarketEngineImpl implements MarketEngine
         if (!isPathOnlyEnglishCharactersAndStandardSymbols(filePath)) {
             throw new IllegalArgumentException("Error: Only English characters and standard path symbols are allowed in the file path.");
         }
-        final List<Event> loadedEvents = parser.parse(filePath);
+        final guessmarket.engine.parsing.api.ParsedMarketData parsedData = parser.parse(filePath);
+        final List<Event> loadedEvents = parsedData.getEvents();
         this.events.clear();
         for (final Event event : loadedEvents) {
             this.events.put(event.getId(), event);
