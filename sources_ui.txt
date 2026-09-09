@@ -1,0 +1,2 @@
+﻿C:\Users\navek\IdeaProjects\GuessMarket\guess-market-javafx\src\guessmarket\javafx\app\Main.java
+C:\Users\navek\IdeaProjects\GuessMarket\guess-market-javafx\src\guessmarket\javafx\ui\MainController.java

@@ -162,7 +162,7 @@ public class EX2_JAXB_XMLFileParser implements FileParser {
             int initial = gmEvent.getGMMethod().getGMOrderBook().getInitial();
             int d = gmEvent.getGMMethod().getGMOrderBook().getD();
             
-            return new OrderBookEvent(id, name, description, commissionType, commissionValue, options, allowMint, initial, d);
+            return new OrderBookEvent(id, name, description, commissionValue, commissionType, options, allowMint, initial, d);
         } else {
             throw new IllegalArgumentException("Error in Event " + id + ": Unknown GM-method type!");
         }

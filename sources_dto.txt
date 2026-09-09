@@ -1,0 +1,5 @@
+﻿C:\Users\navek\IdeaProjects\GuessMarket\guess-market-dto\src\guessmarket\dto\EventDetailsDTO.java
+C:\Users\navek\IdeaProjects\GuessMarket\guess-market-dto\src\guessmarket\dto\EventSummaryDTO.java
+C:\Users\navek\IdeaProjects\GuessMarket\guess-market-dto\src\guessmarket\dto\OptionDTO.java
+C:\Users\navek\IdeaProjects\GuessMarket\guess-market-dto\src\guessmarket\dto\ReceiptDTO.java
+C:\Users\navek\IdeaProjects\GuessMarket\guess-market-dto\src\guessmarket\dto\TransactionDTO.java

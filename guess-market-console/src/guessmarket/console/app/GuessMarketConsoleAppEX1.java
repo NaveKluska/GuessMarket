@@ -6,8 +6,8 @@ import guessmarket.engine.core.impl.MarketEngineImpl;
 import guessmarket.engine.billing.api.CommissionCalculator;
 import guessmarket.engine.billing.impl.StandardCommissionCalculator;
 import guessmarket.engine.parsing.api.FileParser;
-import guessmarket.engine.parsing.impl.EX1_DOM_XMLFileParser;
-import guessmarket.engine.parsing.impl.EX1_XPath_XMLFileParser;
+import guessmarket.engine.parsing.impl.ex1.EX1_DOM_XMLFileParser;
+import guessmarket.engine.parsing.impl.ex1.EX1_XPath_XMLFileParser;
 import guessmarket.engine.parsing.impl.ex1.EX1_JAXB_XMLFileParser;
 
 public class GuessMarketConsoleAppEX1 {

@@ -10,10 +10,10 @@ public class OrderBookEvent extends Event {
     private final int initial;
     private final int d;
 
-    public OrderBookEvent(int id, String name, String description, CommissionType commissionType, 
-                          int commissionValue, List<Option> options, 
+    public OrderBookEvent(int id, String name, String description, int commissionValue,
+                          CommissionType commissionType, List<Option> options, 
                           boolean allowMint, int initial, int d) {
-        super(id, name, description, commissionType, commissionValue, options);
+        super(id, name, description, commissionValue, commissionType, options);
         this.allowMint = allowMint;
         this.initial = initial;
         this.d = d;
@@ -29,5 +29,17 @@ public class OrderBookEvent extends Event {
 
     public int getD() {
         return d;
+    }
+
+    @Override
+    public double getOptionProbability(int optionIndex) {
+        // TODO: Implement Order Book probability logic later
+        throw new UnsupportedOperationException("Order Book logic not yet implemented");
+    }
+
+    @Override
+    public double calculateCost(int optionIndex, int quantity) {
+        // TODO: Implement Order Book cost calculation later
+        throw new UnsupportedOperationException("Order Book logic not yet implemented");
     }
 }

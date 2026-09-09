@@ -32,7 +32,6 @@
         </SOURCES>
       </library>
     </orderEntry>
-    <orderEntry type="library" name="javafx" level="project" />
     <orderEntry type="library" name="jaxb-ri-4.0" level="project" />
   </component>
 </module>

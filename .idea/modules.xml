@@ -6,6 +6,7 @@
       <module fileurl="file://$PROJECT_DIR$/guess-market-console/guess-market-console.iml" filepath="$PROJECT_DIR$/guess-market-console/guess-market-console.iml" />
       <module fileurl="file://$PROJECT_DIR$/guess-market-dto/guess-market-dto.iml" filepath="$PROJECT_DIR$/guess-market-dto/guess-market-dto.iml" />
       <module fileurl="file://$PROJECT_DIR$/guess-market-engine/guess-market-engine.iml" filepath="$PROJECT_DIR$/guess-market-engine/guess-market-engine.iml" />
+      <module fileurl="file://$PROJECT_DIR$/guess-market-javafx/guess-market-javafx.iml" filepath="$PROJECT_DIR$/guess-market-javafx/guess-market-javafx.iml" />
     </modules>
   </component>
 </project>
