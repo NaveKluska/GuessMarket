@@ -8,6 +8,9 @@ import guessmarket.dto.ReceiptDTO;
 import guessmarket.dto.TransactionDTO;
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
+import guessmarket.engine.models.EventStatus;
+import guessmarket.engine.models.LmsrEvent;
+import guessmarket.engine.models.OrderBookEvent;
 import guessmarket.engine.models.Option;
 import guessmarket.engine.models.Transaction;
 import guessmarket.engine.models.User;
@@ -29,6 +32,7 @@ public class MarketEngineImpl implements MarketEngine
     
     private final Map<Integer, Event> events;
     private final Map<String, User> users;
+    private final Map<Integer, String> eventMarketMakers;
     private final FileParser parser;
     private final CommissionCalculator commissionCalculator;
     private boolean isDataLoaded;
@@ -39,6 +43,7 @@ public class MarketEngineImpl implements MarketEngine
         this.commissionCalculator = commissionCalculator;
         this.events = new ConcurrentHashMap<>();
         this.users = new ConcurrentHashMap<>();
+        this.eventMarketMakers = new ConcurrentHashMap<>();
         this.isDataLoaded = false;
     }
 
@@ -57,9 +62,15 @@ public class MarketEngineImpl implements MarketEngine
 
         final List<User> loadedUsers = parsedData.getUsers();
         this.users.clear();
+        this.eventMarketMakers.clear();
         if (loadedUsers != null) {
             for (final User user : loadedUsers) {
                 this.users.put(user.getName(), user);
+                if (user.getMarketMakerForEvents() != null) {
+                    for (final Integer mmEventId : user.getMarketMakerForEvents()) {
+                        this.eventMarketMakers.put(mmEventId, user.getName());
+                    }
+                }
             }
         }
 
@@ -133,24 +144,46 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
         }
 
-        if (!event.getActiveStatus()) {
-            throw new IllegalArgumentException("Cannot buy shares for a closed event.");
+        if (event.getStatus() != EventStatus.ACTIVE) {
+            throw new IllegalArgumentException("Cannot trade on Event " + eventId + " because it is not active (current status: " + event.getStatus() + ").");
         }
 
         if (optionIndex < 0 || optionIndex >= event.getOptions().size()) {
             throw new IllegalArgumentException("Invalid option selection.");
         }
 
+        final User buyer = users.get(memberName);
+        if (buyer == null) {
+            throw new IllegalArgumentException("User '" + memberName + "' does not exist.");
+        }
+        if (buyer.isBlocked()) {
+            throw new IllegalArgumentException("User '" + memberName + "' is blocked due to a negative balance and cannot perform further actions.");
+        }
+
         final double cost = event.calculateCost(optionIndex, quantity);
         final double commission = commissionCalculator.calculate(cost, event.getCommission(), event.getCommissionType(), CommissionType.ON_PURCHASE);
+        final double totalCost = cost + commission;
 
+        buyer.decreaseBalance(totalCost);
+        if (buyer.getBalance() < 0) {
+            buyer.setBlocked(true);
+        }
+
+        event.increaseAccountBalance(cost);
         event.executePurchase(memberName, optionIndex, quantity, cost, commission);
 
-        return new ReceiptDTO(cost, commission, cost + commission, event.getCommissionType() == CommissionType.ON_PURCHASE, mapToDetailsDTO(event));
+        if (commission > 0) {
+            final User mm = users.get(eventMarketMakers.get(eventId));
+            if (mm != null) {
+                mm.increaseBalance(commission);
+            }
+        }
+
+        return new ReceiptDTO(cost, commission, totalCost, event.getCommissionType() == CommissionType.ON_PURCHASE, mapToDetailsDTO(event));
     }
 
     @Override
-    public void closeEvent(final int eventId, final int winningOptionIndex) throws Exception
+    public void openEvent(final String mmName, final int eventId) throws Exception
     {
         if (!isDataLoaded) {
             throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
@@ -161,8 +194,49 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
         }
 
-        if (!event.getActiveStatus()) {
-            throw new IllegalArgumentException("Event is already closed.");
+        final User mm = requireAssignedMarketMaker(mmName, eventId);
+
+        if (event.getStatus() != EventStatus.NOT_ACTIVE) {
+            throw new IllegalArgumentException("Event " + eventId + " cannot be opened (current status: " + event.getStatus() + ").");
+        }
+        if (mm.isBlocked()) {
+            throw new IllegalArgumentException("User '" + mmName + "' is blocked due to a negative balance and cannot perform further actions.");
+        }
+
+        if (event instanceof LmsrEvent) {
+            final double subsidy = ((LmsrEvent) event).calculateInitialSubsidy();
+            if (mm.getBalance() < subsidy) {
+                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + mm.getBalance() + ") to open Event " + eventId + " (requires a subsidy of " + subsidy + ").");
+            }
+            mm.decreaseBalance(subsidy);
+            event.increaseAccountBalance(subsidy);
+            event.activate();
+        } else if (event instanceof OrderBookEvent) {
+            throw new UnsupportedOperationException("Order Book events are not yet supported.");
+        } else {
+            throw new IllegalStateException("Unknown event type: " + event.getClass().getSimpleName());
+        }
+    }
+
+    @Override
+    public void closeEvent(final String mmName, final int eventId, final int winningOptionIndex) throws Exception
+    {
+        if (!isDataLoaded) {
+            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
+        }
+
+        final Event event = events.get(eventId);
+        if (event == null) {
+            throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
+        }
+
+        final User mm = requireAssignedMarketMaker(mmName, eventId);
+
+        if (event.getStatus() != EventStatus.ACTIVE) {
+            throw new IllegalArgumentException("Event " + eventId + " cannot be closed (current status: " + event.getStatus() + ").");
+        }
+        if (mm.isBlocked()) {
+            throw new IllegalArgumentException("User '" + mmName + "' is blocked due to a negative balance and cannot perform further actions.");
         }
 
         if (winningOptionIndex < 0 || winningOptionIndex >= event.getOptions().size()) {
@@ -170,17 +244,46 @@ public class MarketEngineImpl implements MarketEngine
         }
 
         final Option winningOption = event.getOptions().get(winningOptionIndex);
-        event.deactivateEvent(winningOptionIndex);
+        event.close(winningOptionIndex);
 
         for (final Transaction transaction : event.getTransactions()) {
             if (transaction.getOptionName().equals(winningOption.getName())) {
-                final double winAmount = transaction.getQuantity() * COST_OF_SHARE; 
-                final double commission = commissionCalculator.calculate(transaction.getPricePaid(), event.getCommission(), event.getCommissionType(), CommissionType.ON_CLOSE);
-                    
-                event.collectCommission(commission);
-                event.deductFromBalance(winAmount - commission);
+                final double winAmount = transaction.getQuantity() * COST_OF_SHARE;
+                final double closeCommission = commissionCalculator.calculate(winAmount, event.getCommission(), event.getCommissionType(), CommissionType.ON_CLOSE);
+                final double payout = winAmount - closeCommission;
+
+                event.decreaseAccountBalance(payout);
+                if (closeCommission > 0) {
+                    event.collectCommission(closeCommission);
+                    mm.increaseBalance(closeCommission);
+                }
+
+                final User winner = users.get(transaction.getUserName());
+                if (winner != null) {
+                    winner.increaseBalance(payout);
+                }
             }
         }
+
+        if (event instanceof LmsrEvent) {
+            final double leftoverSubsidy = event.getAccountBalance();
+            if (leftoverSubsidy > 0) {
+                event.decreaseAccountBalance(leftoverSubsidy);
+                mm.increaseBalance(leftoverSubsidy);
+            }
+        }
+    }
+
+    private User requireAssignedMarketMaker(final String mmName, final int eventId) {
+        final String assignedMm = eventMarketMakers.get(eventId);
+        if (assignedMm == null || !assignedMm.equals(mmName)) {
+            throw new IllegalArgumentException("User '" + mmName + "' is not the Market Maker for Event " + eventId + ".");
+        }
+        final User mm = users.get(mmName);
+        if (mm == null) {
+            throw new IllegalArgumentException("Market Maker user '" + mmName + "' does not exist.");
+        }
+        return mm;
     }
 
     @Override

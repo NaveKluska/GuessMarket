@@ -49,13 +49,26 @@ public interface MarketEngine {
     ReceiptDTO buyShares(String memberName, int eventId, int optionIndex, int quantity) throws Exception;
 
     /**
-     * Closes an event and processes the final outcome based on the winning choice.
+     * Opens an event for trading. Only the user assigned as the event's Market Maker may open it,
+     * and only from NOT_ACTIVE status. For LMSR events this pays the initial subsidy from the
+     * Market Maker's balance into the event's account.
      *
+     * @param mmName  the name of the user attempting to open the event (must be its assigned MM)
+     * @param eventId the unique identifier of the event to open
+     * @throws Exception if the event cannot be opened (wrong MM, wrong status, insufficient funds, etc.)
+     */
+    void openEvent(String mmName, int eventId) throws Exception;
+
+    /**
+     * Closes an event and processes the final outcome based on the winning choice.
+     * Only the user assigned as the event's Market Maker may close it, and only from ACTIVE status.
+     *
+     * @param mmName             the name of the user attempting to close the event (must be its assigned MM)
      * @param eventId            the unique identifier of the event to close
      * @param winningOptionIndex the index of the option that won the event
-     * @throws Exception if the event cannot be closed (e.g., event does not exist, or is already closed)
+     * @throws Exception if the event cannot be closed (wrong MM, wrong status, event does not exist, etc.)
      */
-    void closeEvent(int eventId, int winningOptionIndex) throws Exception;
+    void closeEvent(String mmName, int eventId, int winningOptionIndex) throws Exception;
 
     /**
      * Saves the current system state to an external file.

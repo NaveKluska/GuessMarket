@@ -16,6 +16,10 @@ public class LmsrEvent extends Event {
         return b;
     }
 
+    public double calculateInitialSubsidy() {
+        return b * Math.log(getOptions().size());
+    }
+
     @Override
     public double getOptionProbability(int optionIndex) {
         double sum = 0.0;

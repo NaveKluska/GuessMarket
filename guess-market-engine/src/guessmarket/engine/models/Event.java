@@ -13,7 +13,7 @@ public abstract class Event implements Serializable
     private int commission;
     private CommissionType commissionType;
     private final List<Option> options;
-    private boolean activeStatus;
+    private EventStatus status;
     protected double accountBalance;
     private double totalCommissionCollected;
     private final List<Transaction> transactions;
@@ -27,7 +27,7 @@ public abstract class Event implements Serializable
         this.commission = commission;
         this.commissionType = commissionType;
         this.options = options;
-        this.activeStatus = true;
+        this.status = EventStatus.NOT_ACTIVE;
         this.accountBalance = 0.0;
         this.totalCommissionCollected = 0.0;
         this.transactions = new ArrayList<>();
@@ -63,9 +63,22 @@ public abstract class Event implements Serializable
         return options;
     }
 
+    public EventStatus getStatus()
+    {
+        return status;
+    }
+
     public boolean getActiveStatus()
     {
-        return activeStatus;
+        return status == EventStatus.ACTIVE;
+    }
+
+    public void activate()
+    {
+        if (this.status != EventStatus.NOT_ACTIVE) {
+            throw new IllegalStateException("Event can only be opened from NOT_ACTIVE status (current: " + status + ").");
+        }
+        this.status = EventStatus.ACTIVE;
     }
 
     public abstract double getOptionProbability(int optionIndex);
@@ -93,24 +106,25 @@ public abstract class Event implements Serializable
         }
         final Option option = options.get(optionIndex);
         option.addShares(quantity);
-        this.accountBalance += (cost + commission);
-        this.totalCommissionCollected += commission;
-        
+        if (commission > 0) {
+            this.totalCommissionCollected += commission;
+        }
+
         final Transaction transaction = new Transaction(memberName, option.getName(), quantity, cost);
         this.transactions.add(transaction);
     }
 
-    public void deactivateEvent(final int winningOptionIndex) {
+    public void close(final int winningOptionIndex) {
+        if (this.status != EventStatus.ACTIVE) {
+            throw new IllegalStateException("Event can only be closed from ACTIVE status (current: " + status + ").");
+        }
         if (winningOptionIndex < 0 || winningOptionIndex >= options.size()) {
             throw new IllegalArgumentException("Invalid option index.");
         }
-        this.activeStatus = false;
+        this.status = EventStatus.CLOSED;
         this.winningOptionName = options.get(winningOptionIndex).getName();
     }
 
-    // TODO: For better encapsulation, this method should throw an IllegalStateException if activeStatus is true.
-    // Implementing this requires updating MarketEngineImpl.mapToDetailsDTO to check getActiveStatus() 
-    // before calling this method, otherwise the engine will crash when mapping active events.
     public String getWinningOptionName() {
         return winningOptionName;
     }
@@ -119,7 +133,17 @@ public abstract class Event implements Serializable
         this.totalCommissionCollected += commission;
     }
 
-    public void deductFromBalance(final double amount) {
+    public void increaseAccountBalance(final double amount) {
+        if (amount < 0) {
+            throw new IllegalArgumentException("Amount to increase account balance by cannot be negative.");
+        }
+        this.accountBalance += amount;
+    }
+
+    public void decreaseAccountBalance(final double amount) {
+        if (amount < 0) {
+            throw new IllegalArgumentException("Amount to decrease account balance by cannot be negative.");
+        }
         this.accountBalance -= amount;
     }
 }
