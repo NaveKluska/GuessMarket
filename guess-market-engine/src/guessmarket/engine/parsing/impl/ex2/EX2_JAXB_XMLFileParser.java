@@ -90,8 +90,8 @@ public class EX2_JAXB_XMLFileParser implements FileParser {
             }
 
             int initialCash = gmUser.getInitialCash();
-            if (initialCash < 0) {
-                throw new IllegalArgumentException("Error for User '" + name + "': Initial cash cannot be negative!");
+            if (initialCash <= 0) {
+                throw new IllegalArgumentException("Error for User '" + name + "': Initial cash must be greater than 0!");
             }
 
             List<Integer> marketMakerEvents = new ArrayList<>();

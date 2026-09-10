@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.chart.LineChart?>
+<?import javafx.scene.chart.NumberAxis?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<ScrollPane fitToWidth="true" fitToHeight="true" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="guessmarket.javafx.ui.UsersViewController">
+<SplitPane dividerPositions="0.4" prefHeight="500.0" prefWidth="800.0">
+   <items>
+      <!-- LEFT SIDE: Users Table -->
+      <VBox spacing="10.0" style="-fx-padding: 10;">
+         <Label text="Users Table" style="-fx-font-size: 16px; -fx-font-weight: bold;" />
+         <TableView fx:id="usersTable" VBox.vgrow="ALWAYS">
+             <columns>
+                 <TableColumn fx:id="userNameColumn" text="Name" prefWidth="150" />
+                 <TableColumn fx:id="userBalanceColumn" text="Balance" prefWidth="100" />
+             </columns>
+             <placeholder><Label text="No users loaded"/></placeholder>
+         </TableView>
+      </VBox>
+
+      <!-- RIGHT SIDE: Single User Details -->
+      <VBox spacing="10.0" style="-fx-padding: 10;">
+         <HBox spacing="10.0" alignment="CENTER_LEFT">
+             <Label text="Single User Details" style="-fx-font-size: 18px; -fx-font-weight: bold;" HBox.hgrow="ALWAYS" maxWidth="Infinity" />
+             <Button text="Add Funds" onAction="#handleAddFunds" style="-fx-base: magenta; -fx-text-fill: white;" />
+         </HBox>
+         
+         <Label fx:id="selectedUserNameLabel" text="Select a user..." style="-fx-font-size: 14px;" />
+         <Label fx:id="selectedUserBalanceLabel" text="Balance: N/A" />
+         <Label fx:id="selectedUserMarketMakerLabel" text="" style="-fx-text-fill: darkorange; -fx-font-style: italic;" />
+
+         <!-- Balance History Chart -->
+         <VBox style="-fx-border-color: gray; -fx-padding: 5;" prefHeight="180.0">
+             <Label text="Balance History" alignment="CENTER" maxWidth="Infinity" style="-fx-font-weight: bold;"/>
+             <LineChart fx:id="balanceChart" createSymbols="false" VBox.vgrow="ALWAYS" animated="false">
+               <xAxis><NumberAxis side="BOTTOM" label="Trade #"/></xAxis>
+               <yAxis><NumberAxis side="LEFT" label="Balance ($)"/></yAxis>
+             </LineChart>
+         </VBox>
+         
+         <VBox style="-fx-border-color: gray; -fx-padding: 5;" VBox.vgrow="ALWAYS" prefHeight="150.0">
+             <Label text="Events Participation / Owner" alignment="CENTER" maxWidth="Infinity"/>
+             <TableView fx:id="portfolioTable" VBox.vgrow="ALWAYS">
+                 <columns>
+                     <TableColumn fx:id="portfolioEventColumn" text="Event ID" prefWidth="75"/>
+                     <TableColumn fx:id="portfolioOptionColumn" text="Option" prefWidth="100"/>
+                     <TableColumn fx:id="portfolioQuantityColumn" text="Quantity" prefWidth="75"/>
+                 </columns>
+                 <placeholder><Label text="No participations"/></placeholder>
+             </TableView>
+         </VBox>
+         
+         <!-- Details for Selected Participation -->
+         <VBox fx:id="participationDetailsBox" style="-fx-border-color: blue; -fx-padding: 5;" prefHeight="150.0" managed="false" visible="false">
+             <Label text="Participation Details" alignment="CENTER" maxWidth="Infinity" style="-fx-font-weight: bold;"/>
+             <VBox fx:id="lmsrDetailsBox" managed="false" visible="false">
+                 <Label text="Trade History (LMSR):"/>
+                 <TableView fx:id="lmsrHistoryTable" VBox.vgrow="ALWAYS" prefHeight="100.0">
+                     <columns>
+                         <TableColumn fx:id="lhOptionColumn" text="Option" />
+                         <TableColumn fx:id="lhQtyColumn" text="Qty" />
+                         <TableColumn fx:id="lhPriceColumn" text="Price Paid" />
+                         <TableColumn fx:id="lhCommColumn" text="Comm Paid" />
+                     </columns>
+                 </TableView>
+                 <Label fx:id="lmsrTotalCommLabel" text="Total Commission Paid: "/>
+                 <Label fx:id="lmsrWinnerLabel" text="" style="-fx-text-fill: green;"/>
+             </VBox>
+             <VBox fx:id="obDetailsBox" managed="false" visible="false">
+                 <Label text="Order Book Status:"/>
+                 <Label fx:id="obHoldingsLabel" text="Holdings: "/>
+                 <Label fx:id="obPaidLabel" text="Total Paid: "/>
+                 <Label fx:id="obCommLabel" text="Total Commission: "/>
+                 <Label fx:id="obProfitLabel" text="" style="-fx-font-weight: bold;"/>
+             </VBox>
+         </VBox>
+      </VBox>
+   </items>
+</SplitPane>
+</ScrollPane>

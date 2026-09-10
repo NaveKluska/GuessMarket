@@ -11,8 +11,10 @@ public class EventSummaryDTO
     private final String commissionType;
     private final List<String> options;
     private final boolean activeStatus;
+    private final boolean isStarted;
+    private final String method;
 
-    public EventSummaryDTO(final int id, final String name, final String description, final int commission, final String commissionType, final List<String> options, final boolean activeStatus)
+    public EventSummaryDTO(final int id, final String name, final String description, final int commission, final String commissionType, final List<String> options, final boolean activeStatus, final boolean isStarted, final String method)
     {
         this.id = id;
         this.name = name;
@@ -21,6 +23,8 @@ public class EventSummaryDTO
         this.commissionType = commissionType;
         this.options = options;
         this.activeStatus = activeStatus;
+        this.isStarted = isStarted;
+        this.method = method;
     }
 
     public int getId()
@@ -36,6 +40,11 @@ public class EventSummaryDTO
     public boolean getActiveStatus()
     {
         return activeStatus;
+    }
+
+    public boolean isStarted()
+    {
+        return isStarted;
     }
 
     public int getCommission()
@@ -56,5 +65,10 @@ public class EventSummaryDTO
     public List<String> getOptions()
     {
         return options;
+    }
+
+    public String getMethod()
+    {
+        return method;
     }
 }

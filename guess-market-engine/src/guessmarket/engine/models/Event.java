@@ -13,11 +13,14 @@ public abstract class Event implements Serializable
     private int commission;
     private CommissionType commissionType;
     private final List<Option> options;
+    private boolean isStarted;
     private boolean activeStatus;
     protected double accountBalance;
     private double totalCommissionCollected;
     private final List<Transaction> transactions;
     private String winningOptionName;
+    // priceHistory.get(optionIndex) = list of recorded probabilities after each trade
+    private final List<List<Double>> priceHistory;
 
     public Event(int id, String name, String description, int commission, CommissionType commissionType, List<Option> options)
     {
@@ -27,10 +30,15 @@ public abstract class Event implements Serializable
         this.commission = commission;
         this.commissionType = commissionType;
         this.options = options;
+        this.isStarted = false;
         this.activeStatus = true;
         this.accountBalance = 0.0;
         this.totalCommissionCollected = 0.0;
         this.transactions = new ArrayList<>();
+        this.priceHistory = new ArrayList<>();
+        for (int i = 0; i < options.size(); i++) {
+            priceHistory.add(new ArrayList<>());
+        }
     }
 
     public int getId()
@@ -63,9 +71,19 @@ public abstract class Event implements Serializable
         return options;
     }
 
+    public boolean isStarted()
+    {
+        return isStarted;
+    }
+
+    public void setStarted(boolean started)
+    {
+        this.isStarted = started;
+    }
+
     public boolean getActiveStatus()
     {
-        return activeStatus;
+        return activeStatus && isStarted;
     }
 
     public abstract double getOptionProbability(int optionIndex);
@@ -98,6 +116,25 @@ public abstract class Event implements Serializable
         
         final Transaction transaction = new Transaction(memberName, option.getName(), quantity, cost);
         this.transactions.add(transaction);
+        
+        // Record price snapshot for chart after each trade
+        recordPriceSnapshot();
+    }
+    
+    public void recordPriceSnapshot() {
+        for (int i = 0; i < options.size(); i++) {
+            if (priceHistory.size() > i) {
+                try {
+                    priceHistory.get(i).add(getOptionProbability(i));
+                } catch (UnsupportedOperationException e) {
+                    // Order Book events may not have a price yet
+                }
+            }
+        }
+    }
+    
+    public List<List<Double>> getPriceHistory() {
+        return priceHistory;
     }
 
     public void deactivateEvent(final int winningOptionIndex) {
@@ -121,5 +158,9 @@ public abstract class Event implements Serializable
 
     public void deductFromBalance(final double amount) {
         this.accountBalance -= amount;
+    }
+
+    public void injectFunds(final double amount) {
+        this.accountBalance += amount;
     }
 }

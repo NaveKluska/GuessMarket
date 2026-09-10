@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.chart.LineChart?>
+<?import javafx.scene.chart.NumberAxis?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.ToggleButton?>
+<?import javafx.scene.control.ToggleGroup?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<SplitPane dividerPositions="0.4" prefHeight="500.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="guessmarket.javafx.ui.EventsViewController">
+   <items>
+      <!-- LEFT SIDE: Filters and Event List -->
+      <ScrollPane fitToWidth="true" fitToHeight="true">
+      <VBox spacing="10.0" style="-fx-padding: 10;">
+         <VBox spacing="5.0">
+             <HBox spacing="10.0" alignment="CENTER_LEFT">
+                <Label text="Type:" prefWidth="60"/>
+                <ToggleButton fx:id="filterAllTypeBtn" text="All" selected="true" onAction="#handleFilterChange">
+                   <toggleGroup><ToggleGroup fx:id="typeGroup"/></toggleGroup>
+                </ToggleButton>
+                <ToggleButton fx:id="filterLMSRBtn" text="LMSR" toggleGroup="$typeGroup" onAction="#handleFilterChange" />
+                <ToggleButton fx:id="filterOBBtn" text="Order Book" toggleGroup="$typeGroup" onAction="#handleFilterChange" />
+             </HBox>
+             <HBox spacing="10.0" alignment="CENTER_LEFT">
+                <Label text="Status:" prefWidth="60"/>
+                <ToggleButton fx:id="filterAllStatusBtn" text="All" selected="true" onAction="#handleFilterChange">
+                   <toggleGroup><ToggleGroup fx:id="statusGroup"/></toggleGroup>
+                </ToggleButton>
+                <ToggleButton fx:id="filterNotStartedBtn" text="Not Started" toggleGroup="$statusGroup" onAction="#handleFilterChange" />
+                <ToggleButton fx:id="filterActiveBtn" text="Active" toggleGroup="$statusGroup" onAction="#handleFilterChange" />
+                <ToggleButton fx:id="filterEndedBtn" text="Ended" toggleGroup="$statusGroup" onAction="#handleFilterChange" />
+             </HBox>
+             <HBox spacing="10.0" alignment="CENTER_LEFT">
+                <Label text="Commission:" prefWidth="60"/>
+                <ToggleButton fx:id="filterAllCommBtn" text="All" selected="true" onAction="#handleFilterChange">
+                   <toggleGroup><ToggleGroup fx:id="commGroup"/></toggleGroup>
+                </ToggleButton>
+                <ToggleButton fx:id="filterOnPurchaseBtn" text="On Purchase" toggleGroup="$commGroup" onAction="#handleFilterChange" />
+                <ToggleButton fx:id="filterOnCloseBtn" text="On Close" toggleGroup="$commGroup" onAction="#handleFilterChange" />
+             </HBox>
+             <!-- Bonus 4: Create Event -->
+             <Button text="Create Event" onAction="#handleCreateEvent" style="-fx-base: lightgreen;" />
+         </VBox>
+         <TableView fx:id="eventsTable" VBox.vgrow="ALWAYS">
+             <columns>
+                 <TableColumn fx:id="idColumn" text="ID" prefWidth="50" />
+                 <TableColumn fx:id="nameColumn" text="Name" prefWidth="150" />
+                 <TableColumn fx:id="statusColumn" text="Status" prefWidth="75" />
+                 <TableColumn fx:id="commissionColumn" text="Commission" prefWidth="100" />
+             </columns>
+             <placeholder><Label text="No events to display"/></placeholder>
+         </TableView>
+      </VBox>
+      </ScrollPane>
+
+      <!-- RIGHT SIDE: Details and Trading -->
+      <ScrollPane fitToWidth="true" fitToHeight="true">
+      <VBox spacing="10.0" style="-fx-padding: 10;">
+         <Label text="Event Details &amp; Trade" style="-fx-font-size: 18px; -fx-font-weight: bold;" alignment="CENTER" maxWidth="Infinity" />
+         
+         <HBox spacing="10.0" VBox.vgrow="ALWAYS">
+            <!-- Option 1 Order Book -->
+            <VBox style="-fx-border-color: gray; -fx-padding: 5;" HBox.hgrow="ALWAYS" alignment="CENTER">
+               <Label fx:id="option1NameLabel" text="Option 1" style="-fx-font-weight: bold;"/>
+               <Label fx:id="option1PriceLabel" text="Price: N/A" />
+               <VBox fx:id="option1StatsBox" alignment="CENTER" managed="false" visible="false">
+                   <Label fx:id="opt1BidLabel" text="BID: N/A"/>
+                   <Label fx:id="opt1AskLabel" text="ASK: N/A"/>
+                   <Label fx:id="opt1MidLabel" text="MID: N/A"/>
+                   <Label fx:id="opt1SpreadLabel" text="SPREAD: N/A"/>
+                   <Label fx:id="opt1LastLabel" text="LAST: N/A"/>
+               </VBox>
+            </VBox>
+            <!-- Option 2 Order Book -->
+            <VBox style="-fx-border-color: gray; -fx-padding: 5;" HBox.hgrow="ALWAYS" alignment="CENTER">
+               <Label fx:id="option2NameLabel" text="Option 2" style="-fx-font-weight: bold;"/>
+               <Label fx:id="option2PriceLabel" text="Price: N/A" />
+               <VBox fx:id="option2StatsBox" alignment="CENTER" managed="false" visible="false">
+                   <Label fx:id="opt2BidLabel" text="BID: N/A"/>
+                   <Label fx:id="opt2AskLabel" text="ASK: N/A"/>
+                   <Label fx:id="opt2MidLabel" text="MID: N/A"/>
+                   <Label fx:id="opt2SpreadLabel" text="SPREAD: N/A"/>
+                   <Label fx:id="opt2LastLabel" text="LAST: N/A"/>
+               </VBox>
+            </VBox>
+         </HBox>
+         
+         <!-- Trading Controls -->
+         <HBox spacing="10.0" alignment="CENTER" style="-fx-padding: 5;">
+             <Label text="Quantity:"/>
+             <javafx.scene.control.TextField fx:id="tradeQuantityField" prefWidth="60"/>
+             <!-- Order Book only controls -->
+             <HBox fx:id="orderBookControls" spacing="10.0" alignment="CENTER" managed="false" visible="false">
+                 <Label text="Price:"/>
+                 <javafx.scene.control.TextField fx:id="tradePriceField" prefWidth="60" promptText="0.00"/>
+                 <javafx.scene.control.ComboBox fx:id="tradeTypeComboBox" prefWidth="80"/>
+             </HBox>
+             <Button text="Trade Opt 1" onAction="#handleBuyOption1"/>
+             <Button text="Trade Opt 2" onAction="#handleBuyOption2"/>
+             <Button fx:id="startEventButton" text="Start Event" onAction="#handleStartEvent" style="-fx-base: limegreen; -fx-text-fill: white;" />
+             <Button fx:id="closeEventButton" text="Close Event" onAction="#handleCloseEvent" style="-fx-base: red; -fx-text-fill: white;" />
+         </HBox>
+
+         <!-- Bonus 3: Chart Placeholder -->
+         <VBox style="-fx-border-color: gray; -fx-padding: 5;" prefHeight="150.0">
+            <Label text="Price History (Bonus)" alignment="CENTER" maxWidth="Infinity"/>
+            <LineChart fx:id="priceChart" createSymbols="false" VBox.vgrow="ALWAYS">
+              <xAxis>
+                <NumberAxis side="BOTTOM" />
+              </xAxis>
+              <yAxis>
+                <NumberAxis side="LEFT" />
+              </yAxis>
+            </LineChart>
+         </VBox>
+
+         <!-- Pending Orders (Order Book only) -->
+         <VBox fx:id="pendingOrdersBox" style="-fx-border-color: orange; -fx-padding: 5;" prefHeight="120.0" managed="false" visible="false">
+             <Label text="Pending Orders (Order Book)" alignment="CENTER" maxWidth="Infinity" style="-fx-font-weight: bold;"/>
+             <TableView fx:id="pendingOrdersTable" VBox.vgrow="ALWAYS">
+                 <columns>
+                     <TableColumn fx:id="poTypeColumn" text="Type" prefWidth="60"/>
+                     <TableColumn fx:id="poUserColumn" text="User" prefWidth="100"/>
+                     <TableColumn fx:id="poOptionColumn" text="Option" prefWidth="100"/>
+                     <TableColumn fx:id="poPriceColumn" text="Limit Price" prefWidth="90"/>
+                     <TableColumn fx:id="poQtyColumn" text="Qty" prefWidth="60"/>
+                 </columns>
+                 <placeholder><Label text="No pending orders"/></placeholder>
+             </TableView>
+         </VBox>
+
+         <!-- Participations Information -->
+         <VBox style="-fx-border-color: gray; -fx-padding: 5;" prefHeight="150.0">
+             <Label text="Participations Information (Holdings)" alignment="CENTER" maxWidth="Infinity"/>
+             <TableView fx:id="transactionsTable" VBox.vgrow="ALWAYS">
+                 <columns>
+                     <TableColumn fx:id="txUserColumn" text="User" prefWidth="100"/>
+                     <TableColumn fx:id="txOptionColumn" text="Option" prefWidth="100"/>
+                     <TableColumn fx:id="txQuantityColumn" text="Quantity Owned" prefWidth="100"/>
+                     <TableColumn fx:id="txPriceColumn" text="Total Value" prefWidth="100"/>
+                 </columns>
+                 <placeholder><Label text="No holdings yet"/></placeholder>
+             </TableView>
+         </VBox>
+      </VBox>
+      </ScrollPane>
+   </items>
+</SplitPane>

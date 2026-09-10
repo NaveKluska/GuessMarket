@@ -1,0 +1,16 @@
+# Compiled output
+out/
+*.class
+
+# IntelliJ project files (local only)
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionaries
+.idea/shelf
+
+# Saved state files
+*.dat
+
+# Temp files
+~$*
