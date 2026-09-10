@@ -10,6 +10,7 @@ import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
 import guessmarket.engine.models.Option;
 import guessmarket.engine.models.Transaction;
+import guessmarket.engine.models.User;
 import guessmarket.engine.billing.api.CommissionCalculator;
 import guessmarket.engine.parsing.api.FileParser;
 
@@ -27,6 +28,7 @@ public class MarketEngineImpl implements MarketEngine
     public static final double COST_OF_SHARE = 1.0;
     
     private final Map<Integer, Event> events;
+    private final Map<String, User> users;
     private final FileParser parser;
     private final CommissionCalculator commissionCalculator;
     private boolean isDataLoaded;
@@ -36,6 +38,7 @@ public class MarketEngineImpl implements MarketEngine
         this.parser = parser;
         this.commissionCalculator = commissionCalculator;
         this.events = new ConcurrentHashMap<>();
+        this.users = new ConcurrentHashMap<>();
         this.isDataLoaded = false;
     }
 
@@ -51,6 +54,15 @@ public class MarketEngineImpl implements MarketEngine
         for (final Event event : loadedEvents) {
             this.events.put(event.getId(), event);
         }
+
+        final List<User> loadedUsers = parsedData.getUsers();
+        this.users.clear();
+        if (loadedUsers != null) {
+            for (final User user : loadedUsers) {
+                this.users.put(user.getName(), user);
+            }
+        }
+
         this.isDataLoaded = true;
     }
 
