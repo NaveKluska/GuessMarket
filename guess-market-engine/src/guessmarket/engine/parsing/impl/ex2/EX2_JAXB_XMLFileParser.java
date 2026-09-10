@@ -21,8 +21,10 @@ import jakarta.xml.bind.Unmarshaller;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class EX2_JAXB_XMLFileParser implements FileParser {
@@ -90,8 +92,8 @@ public class EX2_JAXB_XMLFileParser implements FileParser {
             }
 
             int initialCash = gmUser.getInitialCash();
-            if (initialCash < 0) {
-                throw new IllegalArgumentException("Error for User '" + name + "': Initial cash cannot be negative!");
+            if (initialCash <= 0) {
+                throw new IllegalArgumentException("Error for User '" + name + "': Initial cash must be strictly greater than 0 (found " + initialCash + ")!");
             }
 
             List<Integer> marketMakerEvents = new ArrayList<>();
@@ -161,7 +163,14 @@ public class EX2_JAXB_XMLFileParser implements FileParser {
             boolean allowMint = "true".equalsIgnoreCase(gmEvent.getGMMethod().getGMOrderBook().getAllowMint());
             int initial = gmEvent.getGMMethod().getGMOrderBook().getInitial();
             int d = gmEvent.getGMMethod().getGMOrderBook().getD();
-            
+
+            if (initial < 0) {
+                throw new IllegalArgumentException("Error in Event " + id + ": GM-order-book 'initial' must not be negative!");
+            }
+            if (d <= 0) {
+                throw new IllegalArgumentException("Error in Event " + id + ": GM-order-book 'd' (base value) must be a positive integer!");
+            }
+
             return new OrderBookEvent(id, name, description, commissionValue, commissionType, options, allowMint, initial, d);
         } else {
             throw new IllegalArgumentException("Error in Event " + id + ": Unknown GM-method type!");
@@ -225,17 +234,22 @@ public class EX2_JAXB_XMLFileParser implements FileParser {
             allEventIds.add(event.getId());
         }
 
-        Set<Integer> assignedEventIds = new HashSet<>();
+        Map<Integer, String> assignedByUser = new HashMap<>();
         for (User user : users) {
             for (Integer eventId : user.getMarketMakerForEvents()) {
                 if (!allEventIds.contains(eventId)) {
                     throw new IllegalArgumentException("Error: User '" + user.getName() + "' is assigned as Market Maker for non-existent Event ID " + eventId);
                 }
-                if (!assignedEventIds.add(eventId)) {
-                    throw new IllegalArgumentException("Error: Event ID " + eventId + " has multiple Market Makers assigned!");
+                String existingOwner = assignedByUser.putIfAbsent(eventId, user.getName());
+                if (existingOwner != null) {
+                    if (existingOwner.equals(user.getName())) {
+                        throw new IllegalArgumentException("Error: User '" + user.getName() + "' lists Event ID " + eventId + " as Market Maker more than once!");
+                    }
+                    throw new IllegalArgumentException("Error: Event ID " + eventId + " has multiple Market Makers assigned ('" + existingOwner + "' and '" + user.getName() + "')!");
                 }
             }
         }
+        Set<Integer> assignedEventIds = assignedByUser.keySet();
 
         for (Integer eventId : allEventIds) {
             if (!assignedEventIds.contains(eventId)) {
