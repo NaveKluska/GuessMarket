@@ -1,4 +1,8 @@
-package guessmarket.engine.models;
+package guessmarket.engine.models.orderbook;
+
+import guessmarket.engine.models.CommissionType;
+import guessmarket.engine.models.Event;
+import guessmarket.engine.models.Option;
 
 import java.util.List;
 

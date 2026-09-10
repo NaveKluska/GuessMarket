@@ -1,4 +1,4 @@
-package guessmarket.engine.models;
+package guessmarket.engine.models.orderbook;
 
 public enum OrderSide
 {

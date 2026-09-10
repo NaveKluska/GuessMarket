@@ -2,9 +2,9 @@ package guessmarket.engine.parsing.impl.ex2;
 
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
-import guessmarket.engine.models.LmsrEvent;
+import guessmarket.engine.models.lmsr.LmsrEvent;
 import guessmarket.engine.models.Option;
-import guessmarket.engine.models.OrderBookEvent;
+import guessmarket.engine.models.orderbook.OrderBookEvent;
 import guessmarket.engine.models.User;
 import guessmarket.engine.parsing.api.FileParser;
 import guessmarket.engine.parsing.api.ParsedMarketData;

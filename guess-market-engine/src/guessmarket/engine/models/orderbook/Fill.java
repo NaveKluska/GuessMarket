@@ -1,4 +1,4 @@
-package guessmarket.engine.models;
+package guessmarket.engine.models.orderbook;
 
 /**
  * The result of one resting order being matched against an incoming order, at the resting order's price.

@@ -1,4 +1,4 @@
-package guessmarket.engine.models;
+package guessmarket.engine.models.orderbook;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -15,19 +15,37 @@ public class OrderBook
     private long nextSequence = 0;
 
     /**
-     * Submits a new order, matching it against resting orders on the opposite side first
-     * (best price first, then earliest first among equal prices). Any unfilled remainder
-     * is left resting in the book.
+     * Submits a new order: matches it against the opposite side, then rests whatever's left.
+     * Equivalent to calling createOrder + match + rest yourself; use those three directly
+     * (as OrderBookMarket does) when something needs to happen between matching and resting,
+     * e.g. attempting a mint first.
      *
      * @return the list of fills produced by this submission, in the order they occurred.
      */
     public List<Fill> submit(final String userName, final OrderSide side, final double price, final int quantity)
     {
+        final Order incoming = createOrder(userName, side, price, quantity);
+        final List<Fill> fills = match(incoming);
+        rest(incoming);
+        return fills;
+    }
+
+    public Order createOrder(final String userName, final OrderSide side, final double price, final int quantity)
+    {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Order quantity must be positive.");
         }
+        return new Order(userName, side, price, quantity, nextSequence++);
+    }
 
-        final Order incoming = new Order(userName, side, price, quantity, nextSequence++);
+    /**
+     * Matches the given order against resting orders on the opposite side (best price first,
+     * then earliest first among equal prices), reducing both sides as it goes. Does NOT rest
+     * whatever's left unfilled - call rest() afterward if that's still wanted.
+     */
+    public List<Fill> match(final Order incoming)
+    {
+        final OrderSide side = incoming.getSide();
         final List<Order> oppositeBook = (side == OrderSide.BUY) ? sellOrders : buyOrders;
         oppositeBook.sort(priorityComparator(side == OrderSide.BUY ? OrderSide.SELL : OrderSide.BUY));
 
@@ -59,11 +77,29 @@ public class OrderBook
         }
         oppositeBook.removeAll(fullyFilled);
 
-        if (!incoming.isFullyFilled()) {
-            (side == OrderSide.BUY ? buyOrders : sellOrders).add(incoming);
-        }
-
         return fills;
+    }
+
+    /** Adds the order to the resting book on its own side, unless it's already fully filled. */
+    public void rest(final Order order)
+    {
+        if (order.isFullyFilled()) {
+            return;
+        }
+        (order.getSide() == OrderSide.BUY ? buyOrders : sellOrders).add(order);
+    }
+
+    /** This book's resting BUY orders, best price first (then earliest first) - a snapshot copy, not the live list. */
+    public List<Order> bestBuyOrdersFirst()
+    {
+        final List<Order> sorted = new ArrayList<>(buyOrders);
+        sorted.sort(priorityComparator(OrderSide.BUY));
+        return sorted;
+    }
+
+    public void removeBuyOrder(final Order order)
+    {
+        buyOrders.remove(order);
     }
 
     private boolean priceCrosses(final Order incoming, final Order resting)
