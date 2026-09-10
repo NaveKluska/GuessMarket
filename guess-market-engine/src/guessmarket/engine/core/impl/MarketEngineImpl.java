@@ -27,7 +27,15 @@ import guessmarket.engine.models.User;
 public class MarketEngineImpl implements MarketEngine
 {
     public static final double COST_OF_SHARE = 1.0;
-    
+
+    // Exercise 1 XML files define no <GM-users> block at all (Ex1's spec has a single
+    // implicit user - "the checker" - with no explicit login/registration). When such a
+    // file is loaded we synthesize one account under this name so the shared engine's
+    // user-based checks (balance, market-maker ownership) still have someone to act as.
+    // The console UI (Exercise 1) already hardcodes this exact name for its purchase calls.
+    private static final String CONSOLE_USER_NAME = "ConsoleUser";
+    private static final double CONSOLE_USER_INITIAL_BALANCE = 1_000_000_000.0;
+
     private final Map<Integer, Event> events;
     private final Map<String, User> users;
     private final FileParser parser;
@@ -60,12 +68,30 @@ public class MarketEngineImpl implements MarketEngine
         }
         
         this.users.clear();
-        if (loadedUsers != null) {
+        if (loadedUsers != null && !loadedUsers.isEmpty()) {
             for (final User user : loadedUsers) {
                 this.users.put(user.getName(), user);
             }
+        } else {
+            // Exercise 1 file: no users defined at all. Auto-activate every event
+            // (Ex1 has no explicit "start event" step) and register the synthetic
+            // console user as the market maker of every event, so the shared
+            // engine's user-based checks (balance, MM ownership) still work.
+            final List<Integer> allEventIds = new ArrayList<>();
+            for (final Event event : loadedEvents) {
+                allEventIds.add(event.getId());
+            }
+            this.users.put(CONSOLE_USER_NAME, new User(CONSOLE_USER_NAME, CONSOLE_USER_INITIAL_BALANCE, allEventIds));
+
+            for (final Event event : loadedEvents) {
+                event.setStarted(true);
+                if (event instanceof guessmarket.engine.models.LmsrEvent) {
+                    final guessmarket.engine.models.LmsrEvent lmsr = (guessmarket.engine.models.LmsrEvent) event;
+                    event.injectFunds(lmsr.getB() * Math.log(event.getOptions().size()));
+                }
+            }
         }
-        
+
         this.isDataLoaded = true;
     }
 
@@ -120,7 +146,7 @@ public class MarketEngineImpl implements MarketEngine
             for (guessmarket.engine.models.PortfolioItem item : user.getPortfolio()) {
                 portfolioDTOs.add(new guessmarket.dto.PortfolioItemDTO(item.getEventId(), item.getOptionName(), item.getQuantity()));
             }
-            result.add(new UserDTO(user.getName(), user.getBalance(), user.getMarketMakerForEvents(), portfolioDTOs, new ArrayList<>(user.getBalanceHistory())));
+            result.add(new UserDTO(user.getName(), user.getBalance(), user.getMarketMakerForEvents(), portfolioDTOs, new ArrayList<>(user.getBalanceHistory()), user.isBlocked()));
         }
         
         return result;
@@ -211,16 +237,7 @@ public class MarketEngineImpl implements MarketEngine
         guessmarket.engine.models.User user = users.get(userName);
         if (user == null) throw new IllegalArgumentException("User does not exist.");
         if (user.isBlocked()) throw new IllegalStateException("User " + userName + " is blocked due to a negative balance and cannot perform actions.");
-        
-        // Find the market maker for this event (needed for minting)
-        String marketMakerName = null;
-        for (guessmarket.engine.models.User u : users.values()) {
-            if (u.getMarketMakerForEvents().contains(eventId)) {
-                marketMakerName = u.getName();
-                break;
-            }
-        }
-        
+
         if (type == guessmarket.engine.models.Order.Type.BUY) {
             // Lock funds immediately
             double totalCost = price * quantity;
@@ -235,19 +252,27 @@ public class MarketEngineImpl implements MarketEngine
         }
         
         guessmarket.engine.models.Order order = new guessmarket.engine.models.Order(userName, optionIndex, type, price, quantity);
-        List<guessmarket.engine.models.OrderBookEvent.TradeExecution> trades = obEvent.processOrder(order, marketMakerName);
-        
+        List<guessmarket.engine.models.OrderBookEvent.TradeExecution> trades = obEvent.processOrder(order);
+        final String incomingOptionName = event.getOptions().get(optionIndex).getName();
+
         for (guessmarket.engine.models.OrderBookEvent.TradeExecution trade : trades) {
             guessmarket.engine.models.User buyerUser = users.get(trade.buyer);
-            
+
             if (trade.isMinted) {
-                // Market maker minted shares: buyer already paid (funds locked above).
-                // Buyer receives shares. Market maker receives the payment.
+                // A brand-new share pair was minted: both buyers' payments go into the
+                // event's own account, not to each other.
                 buyerUser.addShares(eventId, trade.optionName, trade.quantity);
-                if (marketMakerName != null) {
-                    guessmarket.engine.models.User mm = users.get(marketMakerName);
-                    if (mm != null) mm.addFunds(trade.price * trade.quantity);
+                event.injectFunds(trade.price * trade.quantity);
+
+                if (trade.optionName.equals(incomingOptionName)) {
+                    // This is the current order's own fill. It locked funds at its own
+                    // limit price when submitted, but the mint executed at a (usually
+                    // lower) complementary price - refund the difference.
+                    double refund = (price - trade.price) * trade.quantity;
+                    buyerUser.addFunds(refund);
                 }
+                // Otherwise this is the resting other-option order's fill: its owner
+                // already locked exactly this price*quantity when they placed it.
             } else {
                 guessmarket.engine.models.User sellerUser = users.get(trade.seller);
                 if (type == guessmarket.engine.models.Order.Type.BUY) {
@@ -288,6 +313,20 @@ public class MarketEngineImpl implements MarketEngine
         }
         events.put(id, new guessmarket.engine.models.OrderBookEvent(id, name, description, commission, commissionType, options, allowMint, initial, d));
         return id;
+    }
+
+    @Override
+    public void assignMarketMaker(int eventId, String userName) {
+        if (!events.containsKey(eventId)) {
+            throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
+        }
+        final guessmarket.engine.models.User user = users.get(userName);
+        if (user == null) {
+            throw new IllegalArgumentException("User " + userName + " does not exist.");
+        }
+        if (!user.getMarketMakerForEvents().contains(eventId)) {
+            user.getMarketMakerForEvents().add(eventId);
+        }
     }
 
     @Override
@@ -340,7 +379,12 @@ public class MarketEngineImpl implements MarketEngine
             }
             user.deductBalance(cost);
             event.injectFunds(cost);
-            obEvent.seedInitialOrders(userName);
+            // Buying `initial` share-PAIRS means `initial` shares of EACH option
+            // (e.g. d=1, initial=100 -> MM receives 100 YES + 100 NO for $100 total).
+            // The MM can list any of these for sale later via a normal SELL order.
+            for (final guessmarket.engine.models.Option option : event.getOptions()) {
+                user.addShares(eventId, option.getName(), obEvent.getInitial());
+            }
         }
 
         event.setStarted(true);
@@ -387,19 +431,44 @@ public class MarketEngineImpl implements MarketEngine
             payoutPerShare = COST_OF_SHARE;
         }
 
-        for (final guessmarket.engine.models.Transaction transaction : event.getTransactions()) {
-            if (transaction.getOptionName().equals(winningOption.getName())) {
-                final double winAmount = transaction.getQuantity() * payoutPerShare;
-                final double commission = commissionCalculator.calculate(transaction.getPricePaid(), event.getCommission(), event.getCommissionType(), guessmarket.engine.models.CommissionType.ON_CLOSE);
-                    
-                event.collectCommission(commission);
-                event.deductFromBalance(winAmount - commission);
-                
-                guessmarket.engine.models.User user = this.users.get(transaction.getUserName());
-                if (user != null) {
-                    user.addFunds(winAmount - commission);
-                }
+        // Find the event's Market Maker: they receive the close-time commission (if any)
+        // and, for LMSR events, whatever subsidy is left over once winners are paid.
+        guessmarket.engine.models.User marketMaker = null;
+        for (final guessmarket.engine.models.User u : this.users.values()) {
+            if (u.getMarketMakerForEvents().contains(eventId)) {
+                marketMaker = u;
+                break;
             }
+        }
+
+        // Pay out by each user's CURRENT holdings of the winning option, not by scanning
+        // historical Transactions: on Order Book events shares can be resold, and a resale
+        // leaves two Transaction records (original buyer + new buyer) for the same shares,
+        // which would double-pay both of them if payout were driven by history instead.
+        for (final guessmarket.engine.models.User user : this.users.values()) {
+            final int holdingQty = user.getPortfolioQuantity(eventId, winningOption.getName());
+            if (holdingQty <= 0) {
+                continue;
+            }
+
+            final double winAmount = holdingQty * payoutPerShare;
+            final double commission = commissionCalculator.calculate(winAmount, event.getCommission(), event.getCommissionType(), guessmarket.engine.models.CommissionType.ON_CLOSE);
+
+            event.collectCommission(commission);
+            event.deductFromBalance(winAmount);
+            user.addFunds(winAmount - commission);
+
+            if (commission > 0 && marketMaker != null) {
+                marketMaker.addFunds(commission);
+            }
+        }
+
+        // LMSR: any subsidy left over in the event's account after paying winners
+        // returns to the event's Market Maker (Appendix A).
+        if (!(event instanceof guessmarket.engine.models.OrderBookEvent) && marketMaker != null && event.getAccountBalance() > 0) {
+            final double leftover = event.getAccountBalance();
+            marketMaker.addFunds(leftover);
+            event.deductFromBalance(leftover);
         }
     }
 
@@ -525,7 +594,8 @@ public class MarketEngineImpl implements MarketEngine
             optionDTOs,
             transactionDTOs,
             event.getWinningOptionName(),
-            event.getPriceHistory()
+            event.getPriceHistory(),
+            (event instanceof guessmarket.engine.models.OrderBookEvent) ? ((guessmarket.engine.models.OrderBookEvent) event).getD() : 0.0
         );
     }
 

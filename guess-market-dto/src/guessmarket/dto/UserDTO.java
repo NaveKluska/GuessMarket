@@ -9,13 +9,15 @@ public class UserDTO implements Serializable {
     private final List<Integer> marketMakerForEvents;
     private final List<PortfolioItemDTO> portfolio;
     private final List<Double> balanceHistory;
+    private final boolean isBlocked;
 
-    public UserDTO(String name, double balance, List<Integer> marketMakerForEvents, List<PortfolioItemDTO> portfolio, List<Double> balanceHistory) {
+    public UserDTO(String name, double balance, List<Integer> marketMakerForEvents, List<PortfolioItemDTO> portfolio, List<Double> balanceHistory, boolean isBlocked) {
         this.name = name;
         this.balance = balance;
         this.marketMakerForEvents = marketMakerForEvents;
         this.portfolio = portfolio;
         this.balanceHistory = balanceHistory;
+        this.isBlocked = isBlocked;
     }
 
     public String getName() {
@@ -36,6 +38,10 @@ public class UserDTO implements Serializable {
 
     public List<Double> getBalanceHistory() {
         return balanceHistory;
+    }
+
+    public boolean isBlocked() {
+        return isBlocked;
     }
 
     @Override

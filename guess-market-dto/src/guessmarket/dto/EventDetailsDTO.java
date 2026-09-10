@@ -17,8 +17,9 @@ public class EventDetailsDTO
     private final List<TransactionDTO> transactions;
     private final String winningOptionName;
     private final List<List<Double>> priceHistory;
+    private final double d; // Order Book base value; 0/unused for LMSR events
 
-    public EventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final boolean activeStatus, final boolean isStarted, final double accountBalance, final double totalCommissionCollected, final List<OptionDTO> options, final List<TransactionDTO> transactions, final String winningOptionName, final List<List<Double>> priceHistory)
+    public EventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final boolean activeStatus, final boolean isStarted, final double accountBalance, final double totalCommissionCollected, final List<OptionDTO> options, final List<TransactionDTO> transactions, final String winningOptionName, final List<List<Double>> priceHistory, final double d)
     {
         this.id = id;
         this.name = name;
@@ -33,6 +34,7 @@ public class EventDetailsDTO
         this.transactions = transactions;
         this.winningOptionName = winningOptionName;
         this.priceHistory = priceHistory;
+        this.d = d;
     }
 
     public int getId()
@@ -98,5 +100,10 @@ public class EventDetailsDTO
     public List<List<Double>> getPriceHistory()
     {
         return priceHistory;
+    }
+
+    public double getD()
+    {
+        return d;
     }
 }

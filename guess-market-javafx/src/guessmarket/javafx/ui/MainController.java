@@ -30,7 +30,8 @@ public class MainController {
     @FXML private ProgressBar progressBar;
     @FXML private ComboBox<String> userComboBox;
     @FXML private ComboBox<String> themeComboBox;
-    
+    @FXML private CheckBox animationsToggle;
+
     @FXML private ToggleButton eventsNavButton;
     @FXML private ToggleButton usersNavButton;
     @FXML private ToggleGroup navGroup;
@@ -106,7 +107,18 @@ public class MainController {
             }
             
             System.out.println("File loaded successfully!");
-            
+
+            // Bonus: a brief pulse on the file path label to confirm the load (a third,
+            // distinct animation from the two view-switch transitions above).
+            if (animationsToggle.isSelected()) {
+                javafx.animation.ScaleTransition pulse = new javafx.animation.ScaleTransition(Duration.seconds(0.3), filePathLabel);
+                pulse.setFromX(1.0); pulse.setFromY(1.0);
+                pulse.setToX(1.15); pulse.setToY(1.15);
+                pulse.setAutoReverse(true);
+                pulse.setCycleCount(2);
+                pulse.play();
+            }
+
             // Reload the view with new data
             if (eventsNavButton.isSelected()) {
                 Platform.runLater(this::loadEventsView);
@@ -143,17 +155,18 @@ public class MainController {
             Parent root = loader.load();
             EventsViewController controller = loader.getController();
             controller.setEngine(engine);
-            controller.setActiveUserSupplier(() -> userComboBox.getValue());
-            
+
             centerContentArea.getChildren().clear();
             centerContentArea.getChildren().add(root);
-            
-            // Bonus 2: Animation
-            FadeTransition ft = new FadeTransition(Duration.seconds(1), root);
-            ft.setFromValue(0.0);
-            ft.setToValue(1.0);
-            ft.play();
-            
+
+            // Bonus: fade-in when switching to the Events screen
+            if (animationsToggle.isSelected()) {
+                FadeTransition ft = new FadeTransition(Duration.seconds(0.6), root);
+                ft.setFromValue(0.0);
+                ft.setToValue(1.0);
+                ft.play();
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -175,18 +188,21 @@ public class MainController {
             
             centerContentArea.getChildren().clear();
             centerContentArea.getChildren().add(root);
-            
-            // Bonus 2: Animation
-            FadeTransition ft = new FadeTransition(Duration.seconds(1), root);
-            ft.setFromValue(0.0);
-            ft.setToValue(1.0);
-            ft.play();
-            
+
+            // Bonus: slide-in when switching to the Users screen (a different
+            // animation from the Events screen's fade, per the bonus requirement).
+            if (animationsToggle.isSelected()) {
+                javafx.animation.TranslateTransition tt = new javafx.animation.TranslateTransition(Duration.seconds(0.6), root);
+                tt.setFromX(-60);
+                tt.setToX(0);
+                tt.play();
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
-    
+
     private void handleThemeChange(ActionEvent event) {
         String theme = themeComboBox.getValue();
         System.out.println("Switching theme to: " + theme);
@@ -197,8 +213,11 @@ public class MainController {
         if ("Dark".equals(theme)) {
             String css = getClass().getResource("/guessmarket/javafx/ui/dark.css").toExternalForm();
             themeComboBox.getScene().getStylesheets().add(css);
+        } else if ("Blue".equals(theme)) {
+            String css = getClass().getResource("/guessmarket/javafx/ui/blue.css").toExternalForm();
+            themeComboBox.getScene().getStylesheets().add(css);
         }
-        // Light and Blue themes will just use default for now unless added
+        // "Light" uses the default JavaFX look (no stylesheet).
     }
 
     @FXML

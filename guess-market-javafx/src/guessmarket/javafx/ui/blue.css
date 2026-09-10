@@ -1,0 +1,17 @@
+.root {
+    -fx-base: #1b3a57;
+    -fx-background: #e8f1fa;
+    -fx-control-inner-background: #ffffff;
+    -fx-accent: #2f7cd6;
+    -fx-font-size: 13px;
+}
+.label {
+    -fx-text-fill: #123456;
+}
+.button {
+    -fx-base: #2f7cd6;
+    -fx-text-fill: white;
+}
+.table-view {
+    -fx-table-cell-border-color: #a9c9e8;
+}

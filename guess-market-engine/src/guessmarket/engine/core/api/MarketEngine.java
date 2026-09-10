@@ -90,6 +90,11 @@ public interface MarketEngine {
     int createOrderBookEvent(String name, String description, int commission, guessmarket.engine.models.CommissionType commissionType, java.util.List<String> optionNames, boolean allowMint, int initial, int d);
 
     /**
+     * Assigns a user as the Market Maker of an event, so they can later start/close it.
+     */
+    void assignMarketMaker(int eventId, String userName);
+
+    /**
      * Places a limit order in an Order Book event.
      */
     void placeOrder(String userName, int eventId, int optionIndex, int quantity, double price, guessmarket.engine.models.Order.Type type) throws Exception;

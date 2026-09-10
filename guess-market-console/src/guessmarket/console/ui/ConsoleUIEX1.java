@@ -282,10 +282,7 @@ public class ConsoleUIEX1 {
             }
 
 
-            System.out.print("Enter your user name (must be the Market Maker for this event): ");
-            String userName = scanner.nextLine().trim();
-
-            engine.closeEvent(eventId, winningOptionIndex - 1, userName);
+            engine.closeEvent(eventId, winningOptionIndex - 1, "ConsoleUser");
             
             System.out.println("Success! Event " + eventId + " has been closed and payouts have been calculated.");
 

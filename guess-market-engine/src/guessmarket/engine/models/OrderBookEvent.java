@@ -113,11 +113,11 @@ public class OrderBookEvent extends Event {
     
     public static class TradeExecution {
         public final String buyer;
-        public final String seller;
+        public final String seller; // null for a minted trade: payment goes to the event's own account, not a counterparty
         public final String optionName;
         public final int quantity;
         public final double price;
-        public final boolean isMinted; // true = filled by market maker minting, no real seller
+        public final boolean isMinted; // true = a brand-new share pair was minted, no real seller
 
         public TradeExecution(String buyer, String seller, String optionName, int quantity, double price, boolean isMinted) {
             this.buyer = buyer;
@@ -130,19 +130,22 @@ public class OrderBookEvent extends Event {
     }
 
     /**
-     * Process an incoming order. If allowMint is true and a BUY order can't be fully matched,
-     * the remaining quantity is filled by minting new shares (no real seller needed).
-     * Returns a list of trade executions for the engine to settle.
-     * marketMakerName is only used when allowMint=true (can be null otherwise).
+     * Process an incoming order and return the trade executions it produced for the
+     * engine to settle. Same-option BUY/SELL orders cross normally. If that leaves a
+     * BUY order unfilled and this event allows minting, it can still be filled via
+     * MINT: a resting BUY on the event's OTHER option, whose price plus this order's
+     * price reaches the base value `d`, together fund a brand-new share pair
+     * (Appendix B) - the resting order fills in full at its own price, and this
+     * order fills at the price complementary to `d`.
      */
-    public List<TradeExecution> processOrder(Order newOrder, String marketMakerName) {
+    public List<TradeExecution> processOrder(Order newOrder) {
         List<TradeExecution> executions = new ArrayList<>();
         int optIndex = newOrder.getOptionIndex();
         PriorityQueue<Order> buys = buyOrders.get(optIndex);
         PriorityQueue<Order> sells = sellOrders.get(optIndex);
-        
+
         if (newOrder.getType() == Order.Type.BUY) {
-            // Try to match against resting sell orders
+            // Try to match against resting sell orders on the same option first.
             while (newOrder.getQuantity() > 0 && !sells.isEmpty()) {
                 Order bestSell = sells.peek();
                 if (newOrder.getPrice() >= bestSell.getPrice()) {
@@ -158,13 +161,31 @@ public class OrderBookEvent extends Event {
                     break;
                 }
             }
-            // If minting allowed and still unfilled, market maker fills the rest
-            if (allowMint && newOrder.getQuantity() > 0 && marketMakerName != null) {
-                double tradePrice = newOrder.getPrice();
-                executions.add(new TradeExecution(newOrder.getUserName(), marketMakerName,
-                    getOptions().get(optIndex).getName(), newOrder.getQuantity(), tradePrice, true));
-                lastTransactionPrices.set(optIndex, tradePrice);
-                newOrder.reduceQuantity(newOrder.getQuantity());
+            // If still unfilled and minting is allowed, look for a resting BUY on the
+            // OTHER option whose price plus ours reaches the base value d - that pair
+            // of buyers mints a new share pair between them.
+            if (allowMint && newOrder.getQuantity() > 0) {
+                int otherIndex = 1 - optIndex;
+                PriorityQueue<Order> otherBuys = buyOrders.get(otherIndex);
+                while (newOrder.getQuantity() > 0 && !otherBuys.isEmpty()
+                        && newOrder.getPrice() + otherBuys.peek().getPrice() >= d) {
+                    Order otherBuy = otherBuys.peek();
+                    int mintQty = Math.min(newOrder.getQuantity(), otherBuy.getQuantity());
+                    double otherPrice = otherBuy.getPrice();
+                    double newOrderPrice = d - otherPrice; // complementary price to the base value
+
+                    executions.add(new TradeExecution(otherBuy.getUserName(), null,
+                        getOptions().get(otherIndex).getName(), mintQty, otherPrice, true));
+                    executions.add(new TradeExecution(newOrder.getUserName(), null,
+                        getOptions().get(optIndex).getName(), mintQty, newOrderPrice, true));
+
+                    newOrder.reduceQuantity(mintQty);
+                    otherBuy.reduceQuantity(mintQty);
+                    if (otherBuy.getQuantity() == 0) otherBuys.poll();
+
+                    lastTransactionPrices.set(optIndex, newOrderPrice);
+                    lastTransactionPrices.set(otherIndex, otherPrice);
+                }
             }
             if (newOrder.getQuantity() > 0) buys.add(newOrder);
         } else {
@@ -189,39 +210,6 @@ public class OrderBookEvent extends Event {
         return executions;
     }
 
-    /** Backwards-compatible overload (no minting). */
-    public List<TradeExecution> processOrder(Order newOrder) {
-        return processOrder(newOrder, null);
-    }
-
-    /**
-     * Seeds the order book with initial liquidity using the 'initial' and 'd' parameters.
-     * Called once after construction when a market maker is assigned.
-     * Places 'initial' buy orders and 'initial' sell orders for every option,
-     * stepping by 'd' cents from the midpoint (0.50).
-     */
-    public List<TradeExecution> seedInitialOrders(String marketMakerName) {
-        List<TradeExecution> executions = new ArrayList<>();
-        if (!allowMint || initial <= 0 || d <= 0) return executions;
-        int optCount = getOptions().size();
-        // Fair prior: equal probability, scaled to d (e.g. d=1 → midpoint=0.50 for 2 options)
-        double midpoint = (double) d / optCount;
-        // Each step moves the price by 1 cent (0.01), capped so prices stay in [0.01, d-0.01]
-        double tickSize = 0.01;
-        for (int i = 0; i < optCount; i++) {
-            for (int step = 1; step <= initial; step++) {
-                double bidPrice = Math.max(0.01, midpoint - step * tickSize);
-                double askPrice = Math.min(d - 0.01, midpoint + step * tickSize);
-                // Market maker places a resting sell at askPrice and a resting buy at bidPrice
-                Order sellOrder = new Order(marketMakerName, i, Order.Type.SELL, askPrice, 1);
-                Order buyOrder  = new Order(marketMakerName, i, Order.Type.BUY,  bidPrice, 1);
-                sellOrders.get(i).add(sellOrder);
-                buyOrders.get(i).add(buyOrder);
-            }
-        }
-        return executions;
-    }
-    
     public void recordTransaction(String buyerName, String optionName, int quantity, double price) {
         getTransactions().add(new Transaction(buyerName, optionName, quantity, price));
         recordPriceSnapshot();
