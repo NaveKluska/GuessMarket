@@ -3,6 +3,7 @@ package guessmarket.engine.core.api;
 import guessmarket.dto.EventDetailsDTO;
 import guessmarket.dto.EventSummaryDTO;
 import guessmarket.dto.ReceiptDTO;
+import guessmarket.engine.models.orderbook.OrderSide;
 
 import java.util.List;
 
@@ -69,6 +70,20 @@ public interface MarketEngine {
      * @throws Exception if the event cannot be closed (wrong MM, wrong status, event does not exist, etc.)
      */
     void closeEvent(String mmName, int eventId, int winningOptionIndex) throws Exception;
+
+    /**
+     * Submits a buy or sell order for an Order Book event's option. May fully or partially match
+     * against resting orders, trigger a mint against the opposite option, or simply rest.
+     *
+     * @param userName    the user submitting the order
+     * @param eventId     the Order Book event to trade on
+     * @param optionIndex the option to trade
+     * @param side        BUY or SELL
+     * @param price       the limit price per share
+     * @param quantity    the number of shares
+     * @throws Exception if the order cannot be submitted (wrong event type, not active, insufficient holdings to sell, etc.)
+     */
+    void submitOrder(String userName, int eventId, int optionIndex, OrderSide side, double price, int quantity) throws Exception;
 
     /**
      * Saves the current system state to an external file.

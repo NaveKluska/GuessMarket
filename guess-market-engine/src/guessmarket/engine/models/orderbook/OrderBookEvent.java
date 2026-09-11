@@ -7,20 +7,22 @@ import guessmarket.engine.models.Option;
 import java.util.List;
 
 public class OrderBookEvent extends Event {
-    
-    // As discussed, we are storing all info from the XML (allowMint, initial, d)
-    // exactly as it is given to avoid losing data that might be needed by the engine later.
+
     private final boolean allowMint;
     private final int initial;
     private final int d;
+    private final OrderBookMarket market;
+    private final Holdings holdings;
 
     public OrderBookEvent(int id, String name, String description, int commissionValue,
-                          CommissionType commissionType, List<Option> options, 
+                          CommissionType commissionType, List<Option> options,
                           boolean allowMint, int initial, int d) {
         super(id, name, description, commissionValue, commissionType, options);
         this.allowMint = allowMint;
         this.initial = initial;
         this.d = d;
+        this.market = new OrderBookMarket(options.size(), d, allowMint);
+        this.holdings = new Holdings(options.size());
     }
 
     public boolean isAllowMint() {
@@ -35,15 +37,22 @@ public class OrderBookEvent extends Event {
         return d;
     }
 
+    public OrderBookMarket getMarket() {
+        return market;
+    }
+
+    public Holdings getHoldings() {
+        return holdings;
+    }
+
     @Override
     public double getOptionProbability(int optionIndex) {
-        // TODO: Implement Order Book probability logic later
-        throw new UnsupportedOperationException("Order Book logic not yet implemented");
+        // Placeholder until LAST/BID/ASK/MID stats are built - not a real market estimate yet.
+        return 0.5;
     }
 
     @Override
     public double calculateCost(int optionIndex, int quantity) {
-        // TODO: Implement Order Book cost calculation later
-        throw new UnsupportedOperationException("Order Book logic not yet implemented");
+        throw new UnsupportedOperationException("Order Book trading goes through submitOrder, not calculateCost.");
     }
 }

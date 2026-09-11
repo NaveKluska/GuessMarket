@@ -10,7 +10,11 @@ import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
 import guessmarket.engine.models.EventStatus;
 import guessmarket.engine.models.lmsr.LmsrEvent;
+import guessmarket.engine.models.orderbook.Fill;
+import guessmarket.engine.models.orderbook.Mint;
 import guessmarket.engine.models.orderbook.OrderBookEvent;
+import guessmarket.engine.models.orderbook.OrderSide;
+import guessmarket.engine.models.orderbook.TradeOutcome;
 import guessmarket.engine.models.Option;
 import guessmarket.engine.models.Transaction;
 import guessmarket.engine.models.User;
@@ -183,6 +187,114 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     @Override
+    public void submitOrder(final String userName, final int eventId, final int optionIndex, final OrderSide side, final double price, final int quantity) throws Exception
+    {
+        if (!isDataLoaded) {
+            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
+        }
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be positive.");
+        }
+
+        final Event event = events.get(eventId);
+        if (event == null) {
+            throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
+        }
+        if (!(event instanceof OrderBookEvent)) {
+            throw new IllegalArgumentException("Event " + eventId + " is not an Order Book event.");
+        }
+        if (event.getStatus() != EventStatus.ACTIVE) {
+            throw new IllegalArgumentException("Cannot trade on Event " + eventId + " because it is not active (current status: " + event.getStatus() + ").");
+        }
+        if (optionIndex < 0 || optionIndex >= event.getOptions().size()) {
+            throw new IllegalArgumentException("Invalid option selection.");
+        }
+
+        final User trader = users.get(userName);
+        if (trader == null) {
+            throw new IllegalArgumentException("User '" + userName + "' does not exist.");
+        }
+        if (trader.isBlocked()) {
+            throw new IllegalArgumentException("User '" + userName + "' is blocked due to a negative balance and cannot perform further actions.");
+        }
+
+        final OrderBookEvent obEvent = (OrderBookEvent) event;
+
+        if (side == OrderSide.SELL) {
+            final int held = obEvent.getHoldings().get(userName, optionIndex);
+            if (held < quantity) {
+                throw new IllegalArgumentException("User '" + userName + "' only holds " + held + " shares of this option, cannot sell " + quantity + ".");
+            }
+            obEvent.getHoldings().decrease(userName, optionIndex, quantity);
+        }
+
+        final TradeOutcome outcome = obEvent.getMarket().submit(userName, optionIndex, side, price, quantity);
+
+        for (final Fill fill : outcome.getFills()) {
+            applyFill(obEvent, optionIndex, fill);
+        }
+        for (final Mint mint : outcome.getMints()) {
+            applyMint(obEvent, mint);
+        }
+    }
+
+    private void applyFill(final OrderBookEvent obEvent, final int optionIndex, final Fill fill) {
+        final boolean restingIsBuy = fill.getRestingOrder().getSide() == OrderSide.BUY;
+        final String buyerName = restingIsBuy ? fill.getRestingOrder().getUserName() : fill.getIncomingOrder().getUserName();
+        final String sellerName = restingIsBuy ? fill.getIncomingOrder().getUserName() : fill.getRestingOrder().getUserName();
+
+        final double tradeValue = fill.getPrice() * fill.getQuantity();
+        final double commission = commissionCalculator.calculate(tradeValue, obEvent.getCommission(), obEvent.getCommissionType(), CommissionType.ON_PURCHASE);
+
+        final User buyer = users.get(buyerName);
+        if (buyer != null) {
+            buyer.decreaseBalance(tradeValue + commission);
+            if (buyer.getBalance() < 0) {
+                buyer.setBlocked(true);
+            }
+            obEvent.getHoldings().increase(buyerName, optionIndex, fill.getQuantity());
+        }
+
+        final User seller = users.get(sellerName);
+        if (seller != null) {
+            seller.increaseBalance(tradeValue);
+        }
+
+        creditCommissionToMm(obEvent, commission);
+    }
+
+    private void applyMint(final OrderBookEvent obEvent, final Mint mint) {
+        applyMintSide(obEvent, mint.getOrderA().getUserName(), mint.getOptionIndexA(), mint.getPriceA(), mint.getQuantity());
+        applyMintSide(obEvent, mint.getOrderB().getUserName(), mint.getOptionIndexB(), mint.getPriceB(), mint.getQuantity());
+    }
+
+    private void applyMintSide(final OrderBookEvent obEvent, final String userName, final int optionIndex, final double price, final int quantity) {
+        final double cost = price * quantity;
+        final double commission = commissionCalculator.calculate(cost, obEvent.getCommission(), obEvent.getCommissionType(), CommissionType.ON_PURCHASE);
+
+        final User user = users.get(userName);
+        if (user != null) {
+            user.decreaseBalance(cost + commission);
+            if (user.getBalance() < 0) {
+                user.setBlocked(true);
+            }
+            obEvent.getHoldings().increase(userName, optionIndex, quantity);
+        }
+
+        obEvent.increaseAccountBalance(cost);
+        creditCommissionToMm(obEvent, commission);
+    }
+
+    private void creditCommissionToMm(final OrderBookEvent obEvent, final double commission) {
+        if (commission > 0) {
+            final User mm = users.get(eventMarketMakers.get(obEvent.getId()));
+            if (mm != null) {
+                mm.increaseBalance(commission);
+            }
+        }
+    }
+
+    @Override
     public void openEvent(final String mmName, final int eventId) throws Exception
     {
         if (!isDataLoaded) {
@@ -212,7 +324,17 @@ public class MarketEngineImpl implements MarketEngine
             event.increaseAccountBalance(subsidy);
             event.activate();
         } else if (event instanceof OrderBookEvent) {
-            throw new UnsupportedOperationException("Order Book events are not yet supported.");
+            final OrderBookEvent obEvent = (OrderBookEvent) event;
+            final double cost = obEvent.getInitial() * (double) obEvent.getD();
+            if (mm.getBalance() < cost) {
+                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + mm.getBalance() + ") to open Event " + eventId + " (requires " + cost + ").");
+            }
+            mm.decreaseBalance(cost);
+            event.increaseAccountBalance(cost);
+            for (int i = 0; i < event.getOptions().size(); i++) {
+                obEvent.getHoldings().increase(mmName, i, obEvent.getInitial());
+            }
+            event.activate();
         } else {
             throw new IllegalStateException("Unknown event type: " + event.getClass().getSimpleName());
         }
@@ -243,38 +365,49 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalArgumentException("Invalid winning option selection.");
         }
 
-        final Option winningOption = event.getOptions().get(winningOptionIndex);
         event.close(winningOptionIndex);
 
-        for (final Transaction transaction : event.getTransactions()) {
-            if (transaction.getOptionName().equals(winningOption.getName())) {
-                final double winAmount = transaction.getQuantity() * COST_OF_SHARE;
-                final double closeCommission = commissionCalculator.calculate(winAmount, event.getCommission(), event.getCommissionType(), CommissionType.ON_CLOSE);
-                final double payout = winAmount - closeCommission;
-
-                // Deduct the FULL winAmount here, not just the net payout - the commission slice
-                // is leaving the account too, just headed to the MM instead of the winner. If we only
-                // deducted "payout", the commission portion would stay counted in the account's balance
-                // and then get swept into the leftover-subsidy refund below a second time.
-                event.decreaseAccountBalance(winAmount);
-                if (closeCommission > 0) {
-                    event.collectCommission(closeCommission);
-                    mm.increaseBalance(closeCommission);
-                }
-
-                final User winner = users.get(transaction.getUserName());
-                if (winner != null) {
-                    winner.increaseBalance(payout);
-                }
-            }
+        if (event instanceof LmsrEvent) {
+            closeLmsrEvent(event, winningOptionIndex, mm);
+        } else if (event instanceof OrderBookEvent) {
+            closeOrderBookEvent((OrderBookEvent) event, winningOptionIndex, mm);
         }
 
-        if (event instanceof LmsrEvent) {
-            final double leftoverSubsidy = event.getAccountBalance();
-            if (leftoverSubsidy > 0) {
-                event.decreaseAccountBalance(leftoverSubsidy);
-                mm.increaseBalance(leftoverSubsidy);
+        final double leftover = event.getAccountBalance();
+        if (leftover > 0.01) {
+            event.decreaseAccountBalance(leftover);
+            mm.increaseBalance(leftover);
+        }
+    }
+
+    private void closeLmsrEvent(final Event event, final int winningOptionIndex, final User mm) {
+        final Option winningOption = event.getOptions().get(winningOptionIndex);
+        for (final Transaction transaction : event.getTransactions()) {
+            if (transaction.getOptionName().equals(winningOption.getName())) {
+                payOutWinner(event, transaction.getUserName(), transaction.getQuantity() * COST_OF_SHARE, mm);
             }
+        }
+    }
+
+    private void closeOrderBookEvent(final OrderBookEvent obEvent, final int winningOptionIndex, final User mm) {
+        for (final Map.Entry<String, Integer> holder : obEvent.getHoldings().holdersOf(winningOptionIndex).entrySet()) {
+            payOutWinner(obEvent, holder.getKey(), holder.getValue() * (double) obEvent.getD(), mm);
+        }
+    }
+
+    private void payOutWinner(final Event event, final String winnerName, final double winAmount, final User mm) {
+        final double closeCommission = commissionCalculator.calculate(winAmount, event.getCommission(), event.getCommissionType(), CommissionType.ON_CLOSE);
+        final double payout = winAmount - closeCommission;
+
+        event.decreaseAccountBalance(winAmount);
+        if (closeCommission > 0) {
+            event.collectCommission(closeCommission);
+            mm.increaseBalance(closeCommission);
+        }
+
+        final User winner = users.get(winnerName);
+        if (winner != null) {
+            winner.increaseBalance(payout);
         }
     }
 
