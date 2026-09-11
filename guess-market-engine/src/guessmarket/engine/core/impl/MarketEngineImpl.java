@@ -11,6 +11,7 @@ import guessmarket.dto.lmsr.LmsrEventDetailsDTO;
 import guessmarket.dto.orderbook.OptionBookDTO;
 import guessmarket.dto.orderbook.OrderBookEventDetailsDTO;
 import guessmarket.dto.orderbook.OrderDTO;
+import guessmarket.dto.orderbook.ParticipantHoldingDTO;
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
 import guessmarket.engine.models.EventStatus;
@@ -553,10 +554,24 @@ public class MarketEngineImpl implements MarketEngine
             optionBooks.add(new OptionBookDTO(option.getName(), quote.getLast(), quote.getBid(), quote.getAsk(), quote.getMid(), quote.getSpread(), bids, asks));
         }
 
+        final List<ParticipantHoldingDTO> participants = new ArrayList<>();
+        for (final String participantName : event.getParticipants()) {
+            final List<Integer> holdings = new ArrayList<>();
+            double estimatedValue = 0.0;
+            for (int i = 0; i < options.size(); i++) {
+                final int quantity = event.getHoldings().get(participantName, i);
+                holdings.add(quantity);
+                final MarketQuote quote = event.getQuote(i);
+                final Double priceEstimate = quote.getMid() != null ? quote.getMid() : quote.getLast();
+                estimatedValue += quantity * (priceEstimate != null ? priceEstimate : event.getD() / 2.0);
+            }
+            participants.add(new ParticipantHoldingDTO(participantName, holdings, estimatedValue));
+        }
+
         return new OrderBookEventDetailsDTO(
             event.getId(), event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
             event.getStatus().name(), event.getAccountBalance(), event.getD(), event.isAllowMint(),
-            optionBooks, event.getWinningOptionName()
+            optionBooks, participants, event.getWinningOptionName()
         );
     }
 

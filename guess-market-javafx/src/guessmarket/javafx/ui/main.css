@@ -65,3 +65,112 @@
     -fx-text-fill: #8b90a0;
     -fx-font-size: 13px;
 }
+
+/* event list cells */
+.event-cell-name {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1a1d29;
+}
+
+.event-cell-meta {
+    -fx-font-size: 11px;
+    -fx-text-fill: #8b90a0;
+}
+
+.pill {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-padding: 2 7 2 7;
+    -fx-background-radius: 99;
+}
+
+.pill-active { -fx-background-color: rgba(31,157,104,0.12); -fx-text-fill: #1f9d68; }
+.pill-notactive { -fx-background-color: #e9ebf1; -fx-text-fill: #8b90a0; }
+.pill-closed { -fx-background-color: rgba(200,68,63,0.12); -fx-text-fill: #c8443f; }
+.pill-lmsr { -fx-background-color: #eef0fd; -fx-text-fill: #4c5fd5; }
+.pill-ob { -fx-background-color: rgba(168,114,13,0.14); -fx-text-fill: #a8720d; }
+
+/* detail header */
+.detail-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1a1d29;
+}
+
+.detail-desc {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: #5b6172;
+}
+
+.meta-label, .stat-label {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #8b90a0;
+}
+
+.meta-value {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1a1d29;
+}
+
+.section-label {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #8b90a0;
+    -fx-padding: 8 0 2 0;
+}
+
+/* price cards (LMSR) */
+.price-card {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e6e8ee;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+.price-card-value {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1f9d68;
+}
+
+.price-card-chance {
+    -fx-font-size: 11px;
+    -fx-text-fill: #8b90a0;
+}
+
+/* order book panels */
+.book-panel {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e6e8ee;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+}
+
+.book-panel-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1a1d29;
+}
+
+.stats-row {
+    -fx-spacing: 1;
+    -fx-background-color: #e6e8ee;
+    -fx-padding: 1 0 1 0;
+}
+
+.stat-box {
+    -fx-background-color: #ffffff;
+    -fx-padding: 6 4 6 4;
+}
+
+.stat-value {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1a1d29;
+}

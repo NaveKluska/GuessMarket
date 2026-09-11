@@ -16,9 +16,10 @@ public class OrderBookEventDetailsDTO implements EventDetailsDTO
     private final int baseValue;
     private final boolean allowMint;
     private final List<OptionBookDTO> optionBooks;
+    private final List<ParticipantHoldingDTO> participants;
     private final String winningOptionName;
 
-    public OrderBookEventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final String status, final double accountBalance, final int baseValue, final boolean allowMint, final List<OptionBookDTO> optionBooks, final String winningOptionName)
+    public OrderBookEventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final String status, final double accountBalance, final int baseValue, final boolean allowMint, final List<OptionBookDTO> optionBooks, final List<ParticipantHoldingDTO> participants, final String winningOptionName)
     {
         this.id = id;
         this.name = name;
@@ -30,6 +31,7 @@ public class OrderBookEventDetailsDTO implements EventDetailsDTO
         this.baseValue = baseValue;
         this.allowMint = allowMint;
         this.optionBooks = optionBooks;
+        this.participants = participants;
         this.winningOptionName = winningOptionName;
     }
 
@@ -100,5 +102,10 @@ public class OrderBookEventDetailsDTO implements EventDetailsDTO
     public List<OptionBookDTO> getOptionBooks()
     {
         return optionBooks;
+    }
+
+    public List<ParticipantHoldingDTO> getParticipants()
+    {
+        return participants;
     }
 }
