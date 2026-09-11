@@ -33,11 +33,7 @@ public class OrderBookMarket
 
     public TradeOutcome submit(final String userName, final int optionIndex, final OrderSide side, final double price, final int quantity)
     {
-        // PRICE RANGE ASSUMPTION - CONFIRM WITH PROFESSOR:
-        // The PDF gives a formula only for the upper bound (d - 0.01); the teacher's reference
-        // simulation rejected a price at d itself with "must be between $0.01 and $0.99" for d=1.
-        // We treat 0.01 as a flat minimum granularity (not scaled by d), since no scaled formula
-        // is given, and treat both endpoints as valid ("between X and Y" read as inclusive).
+        // Confirmed with the professor: 0.01 is a flat hard-coded amount, not a percentage of d.
         final double minPrice = 0.01;
         final double maxPrice = d - 0.01;
         final double epsilon = 1e-9;
@@ -80,12 +76,8 @@ public class OrderBookMarket
             if (incoming.isFullyFilled()) {
                 break;
             }
-            // MINT THRESHOLD ASSUMPTION - CONFIRM WITH PROFESSOR:
-            // The PDF says mint triggers when the two prices together are STRICTLY GREATER
-            // than d, so we use "<=" here to stop (not "<"). An exact match (== d) is
-            // arguably still mint-worthy (the event breaks even instead of profiting) but
-            // that's not what's written, so we follow the letter of the spec.
-            if (incoming.getPrice() + counterpart.getPrice() <= d) {
+            // Confirmed with the professor: mint triggers on >= d, including exact equality.
+            if (incoming.getPrice() + counterpart.getPrice() < d) {
                 break; // bestBuyOrdersFirst() is sorted best-first, so nothing later qualifies either.
             }
 
