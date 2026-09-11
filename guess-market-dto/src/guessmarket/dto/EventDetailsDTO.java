@@ -1,88 +1,28 @@
 package guessmarket.dto;
 
-import java.util.List;
-
-public class EventDetailsDTO
+/**
+ * Common shape shared by both event types. LMSR and Order Book events show fundamentally
+ * different data beyond this (trade history vs. order book + quotes), so each gets its own
+ * implementation - see guessmarket.dto.lmsr.LmsrEventDetailsDTO and
+ * guessmarket.dto.orderbook.OrderBookEventDetailsDTO.
+ */
+public interface EventDetailsDTO
 {
-    private final int id;
-    private final String name;
-    private final String description;
-    private final int commission;
-    private final String commissionType;
-    private final List<OptionDTO> options;
-    private final boolean activeStatus;
-    private final double accountBalance;
-    private final double totalCommissionCollected;
-    private final List<TransactionDTO> transactions;
-    private final String winningOptionName;
+    int getId();
 
-    public EventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final boolean activeStatus, final double accountBalance, final double totalCommissionCollected, final List<OptionDTO> options, final List<TransactionDTO> transactions, final String winningOptionName)
-    {
-        this.id = id;
-        this.name = name;
-        this.description = description;
-        this.commission = commission;
-        this.commissionType = commissionType;
-        this.activeStatus = activeStatus;
-        this.accountBalance = accountBalance;
-        this.totalCommissionCollected = totalCommissionCollected;
-        this.options = options;
-        this.transactions = transactions;
-        this.winningOptionName = winningOptionName;
-    }
+    String getName();
 
-    public int getId()
-    {
-        return id;
-    }
+    String getDescription();
 
-    public String getName()
-    {
-        return name;
-    }
+    int getCommission();
 
-    public String getDescription()
-    {
-        return description;
-    }
+    String getCommissionType();
 
-    public int getCommission()
-    {
-        return commission;
-    }
+    String getStatus();
 
-    public String getCommissionType()
-    {
-        return commissionType;
-    }
+    String getType();
 
-    public List<OptionDTO> getOptions()
-    {
-        return options;
-    }
+    double getAccountBalance();
 
-    public boolean getActiveStatus()
-    {
-        return activeStatus;
-    }
-
-    public double getAccountBalance()
-    {
-        return accountBalance;
-    }
-
-    public double getTotalCommissionCollected()
-    {
-        return totalCommissionCollected;
-    }
-
-    public List<TransactionDTO> getTransactions()
-    {
-        return transactions;
-    }
-
-    public String getWinningOptionName()
-    {
-        return winningOptionName;
-    }
+    String getWinningOptionName();
 }

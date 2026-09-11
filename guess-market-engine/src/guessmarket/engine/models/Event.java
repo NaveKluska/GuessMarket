@@ -2,7 +2,9 @@ package guessmarket.engine.models;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public abstract class Event implements Serializable
 {
@@ -18,6 +20,7 @@ public abstract class Event implements Serializable
     private double totalCommissionCollected;
     private final List<Transaction> transactions;
     private String winningOptionName;
+    private final Set<String> participants = new HashSet<>();
 
     public Event(int id, String name, String description, int commission, CommissionType commissionType, List<Option> options)
     {
@@ -127,6 +130,14 @@ public abstract class Event implements Serializable
 
     public String getWinningOptionName() {
         return winningOptionName;
+    }
+
+    public void addParticipant(final String userName) {
+        participants.add(userName);
+    }
+
+    public Set<String> getParticipants() {
+        return participants;
     }
 
     public void collectCommission(final double commission) {

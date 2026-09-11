@@ -6,12 +6,19 @@ import guessmarket.dto.EventSummaryDTO;
 import guessmarket.dto.OptionDTO;
 import guessmarket.dto.ReceiptDTO;
 import guessmarket.dto.TransactionDTO;
+import guessmarket.dto.UserSummaryDTO;
+import guessmarket.dto.lmsr.LmsrEventDetailsDTO;
+import guessmarket.dto.orderbook.OptionBookDTO;
+import guessmarket.dto.orderbook.OrderBookEventDetailsDTO;
+import guessmarket.dto.orderbook.OrderDTO;
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
 import guessmarket.engine.models.EventStatus;
 import guessmarket.engine.models.lmsr.LmsrEvent;
 import guessmarket.engine.models.orderbook.Fill;
+import guessmarket.engine.models.orderbook.MarketQuote;
 import guessmarket.engine.models.orderbook.Mint;
+import guessmarket.engine.models.orderbook.Order;
 import guessmarket.engine.models.orderbook.OrderBookEvent;
 import guessmarket.engine.models.orderbook.OrderSide;
 import guessmarket.engine.models.orderbook.TradeOutcome;
@@ -133,6 +140,31 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     @Override
+    public List<UserSummaryDTO> getAllUsers()
+    {
+        if (!isDataLoaded) {
+            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
+        }
+
+        final List<UserSummaryDTO> result = new ArrayList<>();
+        for (final User user : this.users.values()) {
+            final List<Integer> activeEventIds = new ArrayList<>();
+            for (final Event event : this.events.values()) {
+                if (event.getStatus() == EventStatus.ACTIVE && isParticipant(user.getName(), event)) {
+                    activeEventIds.add(event.getId());
+                }
+            }
+            final boolean isMarketMaker = user.getMarketMakerForEvents() != null && !user.getMarketMakerForEvents().isEmpty();
+            result.add(new UserSummaryDTO(user.getName(), user.getBalance(), user.isBlocked(), isMarketMaker, activeEventIds));
+        }
+        return result;
+    }
+
+    private boolean isParticipant(final String userName, final Event event) {
+        return event.getParticipants().contains(userName);
+    }
+
+    @Override
     public ReceiptDTO buyShares(final String memberName, final int eventId, final int optionIndex, final int quantity) throws Exception
     {
         if (!isDataLoaded) {
@@ -175,6 +207,7 @@ public class MarketEngineImpl implements MarketEngine
 
         event.increaseAccountBalance(cost);
         event.executePurchase(memberName, optionIndex, quantity, cost, commission);
+        event.addParticipant(memberName);
 
         if (commission > 0) {
             final User mm = users.get(eventMarketMakers.get(eventId));
@@ -219,6 +252,7 @@ public class MarketEngineImpl implements MarketEngine
         }
 
         final OrderBookEvent obEvent = (OrderBookEvent) event;
+        obEvent.addParticipant(userName);
 
         if (side == OrderSide.SELL) {
             final int held = obEvent.getHoldings().get(userName, optionIndex);
@@ -322,6 +356,7 @@ public class MarketEngineImpl implements MarketEngine
             }
             mm.decreaseBalance(subsidy);
             event.increaseAccountBalance(subsidy);
+            event.addParticipant(mmName);
             event.activate();
         } else if (event instanceof OrderBookEvent) {
             final OrderBookEvent obEvent = (OrderBookEvent) event;
@@ -334,6 +369,7 @@ public class MarketEngineImpl implements MarketEngine
             for (int i = 0; i < event.getOptions().size(); i++) {
                 obEvent.getHoldings().increase(mmName, i, obEvent.getInitial());
             }
+            obEvent.addParticipant(mmName);
             event.activate();
         } else {
             throw new IllegalStateException("Unknown event type: " + event.getClass().getSimpleName());
@@ -474,45 +510,62 @@ public class MarketEngineImpl implements MarketEngine
             event.getCommission(),
             event.getCommissionType().name(),
             optionNames,
-            event.getActiveStatus()
+            event.getStatus().name(),
+            (event instanceof LmsrEvent) ? "LMSR" : "ORDER_BOOK"
         );
     }
 
     private EventDetailsDTO mapToDetailsDTO(final Event event) {
+        if (event instanceof LmsrEvent) {
+            return mapLmsrDetailsDTO(event);
+        }
+        return mapOrderBookDetailsDTO((OrderBookEvent) event);
+    }
+
+    private LmsrEventDetailsDTO mapLmsrDetailsDTO(final Event event) {
         final List<OptionDTO> optionDTOs = new ArrayList<>();
         final List<Option> options = event.getOptions();
-        if (options != null) {
-            for (int i = 0; i < options.size(); i++) {
-                Option option = options.get(i);
-                double prob = event.getOptionProbability(i);
-                optionDTOs.add(new OptionDTO(option.getName(), option.getSharesBought(), prob));
-            }
+        for (int i = 0; i < options.size(); i++) {
+            final Option option = options.get(i);
+            optionDTOs.add(new OptionDTO(option.getName(), option.getSharesBought(), event.getOptionProbability(i)));
         }
 
         final List<TransactionDTO> transactionDTOs = new ArrayList<>();
-        final List<Transaction> transactions = event.getTransactions();
-        if (transactions != null) {
-            for (final Transaction tx : transactions) {
-                transactionDTOs.add(new TransactionDTO(
-                    tx.getUserName(), tx.getOptionName(), tx.getQuantity(),
-                    tx.getPricePaid(), tx.getTimestamp()
-                ));
-            }
+        for (final Transaction tx : event.getTransactions()) {
+            transactionDTOs.add(new TransactionDTO(tx.getUserName(), tx.getOptionName(), tx.getQuantity(), tx.getPricePaid(), tx.getTimestamp()));
         }
 
-        return new EventDetailsDTO(
-            event.getId(),
-            event.getName(),
-            event.getDescription(),
-            event.getCommission(),
-            event.getCommissionType().name(),
-            event.getActiveStatus(),
-            event.getAccountBalance(),
-            event.getTotalCommissionCollected(),
-            optionDTOs,
-            transactionDTOs,
-            event.getWinningOptionName()
+        return new LmsrEventDetailsDTO(
+            event.getId(), event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
+            event.getStatus().name(), event.getAccountBalance(), event.getTotalCommissionCollected(),
+            optionDTOs, transactionDTOs, event.getWinningOptionName()
         );
+    }
+
+    private OrderBookEventDetailsDTO mapOrderBookDetailsDTO(final OrderBookEvent event) {
+        final List<OptionBookDTO> optionBooks = new ArrayList<>();
+        final List<Option> options = event.getOptions();
+        for (int i = 0; i < options.size(); i++) {
+            final Option option = options.get(i);
+            final MarketQuote quote = event.getQuote(i);
+            final List<OrderDTO> bids = toOrderDTOs(event.getMarket().getBook(i).bestBuyOrdersFirst());
+            final List<OrderDTO> asks = toOrderDTOs(event.getMarket().getBook(i).bestSellOrdersFirst());
+            optionBooks.add(new OptionBookDTO(option.getName(), quote.getLast(), quote.getBid(), quote.getAsk(), quote.getMid(), quote.getSpread(), bids, asks));
+        }
+
+        return new OrderBookEventDetailsDTO(
+            event.getId(), event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
+            event.getStatus().name(), event.getAccountBalance(), event.getD(), event.isAllowMint(),
+            optionBooks, event.getWinningOptionName()
+        );
+    }
+
+    private List<OrderDTO> toOrderDTOs(final List<Order> orders) {
+        final List<OrderDTO> result = new ArrayList<>();
+        for (final Order order : orders) {
+            result.add(new OrderDTO(order.getUserName(), order.getQuantity(), order.getPrice()));
+        }
+        return result;
     }
 
     private boolean isPathOnlyEnglishCharactersAndStandardSymbols(String path) {

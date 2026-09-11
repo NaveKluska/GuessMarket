@@ -3,6 +3,7 @@ package guessmarket.engine.core.api;
 import guessmarket.dto.EventDetailsDTO;
 import guessmarket.dto.EventSummaryDTO;
 import guessmarket.dto.ReceiptDTO;
+import guessmarket.dto.UserSummaryDTO;
 import guessmarket.engine.models.orderbook.OrderSide;
 
 import java.util.List;
@@ -29,6 +30,12 @@ public interface MarketEngine {
     List<EventSummaryDTO> getAllEvents();
 
     List<EventSummaryDTO> getActiveEvents();
+
+    /**
+     * Retrieves a summary of all users currently loaded in the system, including which
+     * currently-active events each one is participating in.
+     */
+    List<UserSummaryDTO> getAllUsers();
 
     /**
      * Retrieves detailed status and information for a specific event.

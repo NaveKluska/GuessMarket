@@ -103,6 +103,14 @@ public class OrderBook
         buyOrders.remove(order);
     }
 
+    /** This book's resting SELL orders, best price first (then earliest first) - a snapshot copy, not the live list. */
+    public List<Order> bestSellOrdersFirst()
+    {
+        final List<Order> sorted = new ArrayList<>(sellOrders);
+        sorted.sort(priorityComparator(OrderSide.SELL));
+        return sorted;
+    }
+
     public Double bestBid()
     {
         Double best = null;
