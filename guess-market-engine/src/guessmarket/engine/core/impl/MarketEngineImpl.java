@@ -252,7 +252,11 @@ public class MarketEngineImpl implements MarketEngine
                 final double closeCommission = commissionCalculator.calculate(winAmount, event.getCommission(), event.getCommissionType(), CommissionType.ON_CLOSE);
                 final double payout = winAmount - closeCommission;
 
-                event.decreaseAccountBalance(payout);
+                // Deduct the FULL winAmount here, not just the net payout - the commission slice
+                // is leaving the account too, just headed to the MM instead of the winner. If we only
+                // deducted "payout", the commission portion would stay counted in the account's balance
+                // and then get swept into the leftover-subsidy refund below a second time.
+                event.decreaseAccountBalance(winAmount);
                 if (closeCommission > 0) {
                     event.collectCommission(closeCommission);
                     mm.increaseBalance(closeCommission);

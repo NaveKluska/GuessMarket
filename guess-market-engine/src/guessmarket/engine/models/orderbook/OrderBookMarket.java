@@ -33,6 +33,18 @@ public class OrderBookMarket
 
     public TradeOutcome submit(final String userName, final int optionIndex, final OrderSide side, final double price, final int quantity)
     {
+        // PRICE RANGE ASSUMPTION - CONFIRM WITH PROFESSOR:
+        // The PDF gives a formula only for the upper bound (d - 0.01); the teacher's reference
+        // simulation rejected a price at d itself with "must be between $0.01 and $0.99" for d=1.
+        // We treat 0.01 as a flat minimum granularity (not scaled by d), since no scaled formula
+        // is given, and treat both endpoints as valid ("between X and Y" read as inclusive).
+        final double minPrice = 0.01;
+        final double maxPrice = d - 0.01;
+        final double epsilon = 1e-9;
+        if (price < minPrice - epsilon || price > maxPrice + epsilon) {
+            throw new IllegalArgumentException("Order price must be between " + minPrice + " and " + maxPrice + " (got " + price + ").");
+        }
+
         final OrderBook book = booksByOptionIndex[optionIndex];
         final Order incoming = book.createOrder(userName, side, price, quantity);
 
@@ -70,7 +82,11 @@ public class OrderBookMarket
             }
 
             final int mintQuantity = Math.min(incoming.getQuantity(), counterpart.getQuantity());
-            mints.add(new Mint(incomingOptionIndex, incoming, otherOptionIndex, counterpart, mintQuantity));
+            // Resting order (counterpart) gets exactly its own quoted price. Incoming pays the
+            // complement (d - counterpart's price), NOT its own quoted price - see Mint's javadoc.
+            final double restingPrice = counterpart.getPrice();
+            final double incomingPrice = d - restingPrice;
+            mints.add(new Mint(incomingOptionIndex, incoming, incomingPrice, otherOptionIndex, counterpart, restingPrice, mintQuantity));
             incoming.reduceQuantity(mintQuantity);
             counterpart.reduceQuantity(mintQuantity);
 
