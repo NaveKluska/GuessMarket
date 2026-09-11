@@ -149,14 +149,15 @@ public class MarketEngineImpl implements MarketEngine
 
         final List<UserSummaryDTO> result = new ArrayList<>();
         for (final User user : this.users.values()) {
-            final List<Integer> activeEventIds = new ArrayList<>();
+            final List<Integer> relevantEventIds = new ArrayList<>();
             for (final Event event : this.events.values()) {
-                if (event.getStatus() == EventStatus.ACTIVE && isParticipant(user.getName(), event)) {
-                    activeEventIds.add(event.getId());
+                final boolean isOwner = user.getName().equals(eventMarketMakers.get(event.getId()));
+                if (isOwner || isParticipant(user.getName(), event)) {
+                    relevantEventIds.add(event.getId());
                 }
             }
             final boolean isMarketMaker = user.getMarketMakerForEvents() != null && !user.getMarketMakerForEvents().isEmpty();
-            result.add(new UserSummaryDTO(user.getName(), user.getBalance(), user.isBlocked(), isMarketMaker, activeEventIds));
+            result.add(new UserSummaryDTO(user.getName(), user.getBalance(), user.isBlocked(), isMarketMaker, relevantEventIds));
         }
         return result;
     }
@@ -512,7 +513,8 @@ public class MarketEngineImpl implements MarketEngine
             event.getCommissionType().name(),
             optionNames,
             event.getStatus().name(),
-            (event instanceof LmsrEvent) ? "LMSR" : "ORDER_BOOK"
+            (event instanceof LmsrEvent) ? "LMSR" : "ORDER_BOOK",
+            eventMarketMakers.get(event.getId())
         );
     }
 

@@ -19,6 +19,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Alert;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
@@ -46,6 +47,7 @@ public class MainController {
 
     private MarketEngine engine;
     private final List<EventSummaryDTO> allEvents = new ArrayList<>();
+    private final List<UserSummaryDTO> allUsers = new ArrayList<>();
 
     @FXML
     private Label filePathLabel;
@@ -55,6 +57,9 @@ public class MainController {
 
     @FXML
     private Button loadFileButton;
+
+    @FXML
+    private TabPane mainTabPane;
 
     @FXML
     private ComboBox<String> methodFilterCombo;
@@ -72,7 +77,7 @@ public class MainController {
     private VBox eventDetailPane;
 
     @FXML
-    private ListView<String> userListView;
+    private ListView<UserSummaryDTO> userListView;
 
     @FXML
     private VBox userDetailPane;
@@ -98,6 +103,9 @@ public class MainController {
 
         eventListView.setCellFactory(list -> new EventCell());
         eventListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> showEventDetails(newVal));
+
+        userListView.setCellFactory(list -> new UserCell());
+        userListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> showUserDetails(newVal));
 
         loadFileButton.setOnAction(event -> onLoadFileClicked());
     }
@@ -140,6 +148,8 @@ public class MainController {
             allEvents.addAll(loadTask.getValue());
             refreshEventList();
             eventDetailPane.getChildren().setAll(placeholder("Select an event to see its details."));
+            refreshUsersList();
+            userDetailPane.getChildren().setAll(placeholder("Select a user to see their details."));
         });
 
         loadTask.setOnFailed(event -> {
@@ -217,6 +227,137 @@ public class MainController {
             box.setPadding(new Insets(4, 2, 4, 2));
             setGraphic(box);
         }
+    }
+
+    private class UserCell extends ListCell<UserSummaryDTO> {
+        @Override
+        protected void updateItem(UserSummaryDTO user, boolean empty) {
+            super.updateItem(user, empty);
+            if (empty || user == null) {
+                setGraphic(null);
+                return;
+            }
+            Label name = new Label(user.getName());
+            name.getStyleClass().add("event-cell-name");
+            Label balance = new Label(money(user.getBalance()) + (user.isBlocked() ? "  ·  blocked" : ""));
+            balance.getStyleClass().add("event-cell-meta");
+
+            VBox box = new VBox(4, name, balance);
+            box.setPadding(new Insets(4, 2, 4, 2));
+            setGraphic(box);
+        }
+    }
+
+    // ---------------------------------------------------------------- user details
+
+    private void showUserDetails(UserSummaryDTO user) {
+        if (user == null) {
+            userDetailPane.getChildren().setAll(placeholder("Select a user to see their details."));
+            return;
+        }
+
+        List<Node> nodes = new ArrayList<>();
+
+        Label nameLabel = new Label(user.getName());
+        nameLabel.getStyleClass().add("detail-title");
+        nodes.add(nameLabel);
+
+        HBox balanceTile = new HBox(24, metaBox("Account balance", money(user.getBalance())), metaBox("Blocked", user.isBlocked() ? "Yes" : "No"));
+        balanceTile.setPadding(new Insets(8, 0, 14, 0));
+        nodes.add(balanceTile);
+
+        nodes.add(sectionLabel("Events participation / owner"));
+        if (user.getRelevantEventIds().isEmpty()) {
+            nodes.add(placeholder("Not participating in, or owning, any event yet."));
+        } else {
+            for (Integer eventId : user.getRelevantEventIds()) {
+                nodes.add(participationCard(user.getName(), eventId));
+            }
+        }
+
+        userDetailPane.getChildren().setAll(nodes);
+    }
+
+    private VBox participationCard(String userName, int eventId) {
+        EventSummaryDTO summary = null;
+        for (EventSummaryDTO e : allEvents) {
+            if (e.getId() == eventId) {
+                summary = e;
+                break;
+            }
+        }
+        VBox card = new VBox(6);
+        card.getStyleClass().add("book-panel");
+        card.setPadding(new Insets(10));
+        card.setCursor(javafx.scene.Cursor.HAND);
+        card.setOnMouseClicked(e -> jumpToEvent(eventId));
+        if (summary == null) {
+            card.getChildren().add(placeholder("Event " + eventId + " (details unavailable)."));
+            return card;
+        }
+
+        boolean isMm = userName.equals(summary.getMarketMakerName());
+        Label title = new Label(summary.getName());
+        title.getStyleClass().add("book-panel-title");
+        HBox pills = new HBox(6, pill(readableType(summary.getType()), typePillClass(summary.getType())), pill(readableStatus(summary.getStatus()), statusPillClass(summary.getStatus())));
+        Label role = new Label("Role: " + (isMm ? "Market Maker" : "Participant"));
+        role.getStyleClass().add("event-cell-meta");
+        Label hint = new Label("Click to open in Events →");
+        hint.getStyleClass().add("placeholder-label");
+        card.getChildren().addAll(title, pills, role, hint);
+
+        try {
+            EventDetailsDTO details = engine.getEventDetails(eventId);
+            if (details instanceof LmsrEventDetailsDTO) {
+                LmsrEventDetailsDTO lmsr = (LmsrEventDetailsDTO) details;
+                List<TransactionDTO> userTrades = new ArrayList<>();
+                for (TransactionDTO tx : lmsr.getTransactions()) {
+                    if (tx.getUserName().equals(userName)) {
+                        userTrades.add(tx);
+                    }
+                }
+                if (userTrades.isEmpty()) {
+                    card.getChildren().add(placeholder("No trades by this user yet."));
+                } else {
+                    TableView<TransactionDTO> table = new TableView<>();
+                    table.getColumns().add(column("Option", "optionName", 90));
+                    table.getColumns().add(column("Qty", "quantity", 60));
+                    table.getColumns().add(moneyColumn("Paid", "pricePaid", 80));
+                    table.getItems().addAll(userTrades);
+                    table.setPrefHeight(100);
+                    card.getChildren().add(table);
+                }
+            } else if (details instanceof OrderBookEventDetailsDTO) {
+                OrderBookEventDetailsDTO ob = (OrderBookEventDetailsDTO) details;
+                ParticipantHoldingDTO match = null;
+                for (ParticipantHoldingDTO p : ob.getParticipants()) {
+                    if (p.getUserName().equals(userName)) {
+                        match = p;
+                        break;
+                    }
+                }
+                if (match == null) {
+                    card.getChildren().add(placeholder("No holdings by this user yet."));
+                } else {
+                    StringBuilder holdingsText = new StringBuilder();
+                    for (int i = 0; i < ob.getOptionBooks().size(); i++) {
+                        if (i > 0) {
+                            holdingsText.append("   ");
+                        }
+                        holdingsText.append(ob.getOptionBooks().get(i).getOptionName()).append(": ").append(match.getHoldingsByOption().get(i));
+                    }
+                    Label holdings = new Label(holdingsText.toString());
+                    holdings.getStyleClass().add("meta-value");
+                    Label value = new Label("Est. value: " + money(match.getEstimatedValue()));
+                    value.getStyleClass().add("event-cell-meta");
+                    card.getChildren().addAll(holdings, value);
+                }
+            }
+        } catch (Exception e) {
+            card.getChildren().add(placeholder(e.getMessage()));
+        }
+
+        return card;
     }
 
     // ---------------------------------------------------------------- event details
@@ -381,6 +522,7 @@ public class MainController {
             allEvents.clear();
             allEvents.addAll(engine.getAllEvents());
             refreshEventList();
+            refreshUsersList();
             for (EventSummaryDTO e : eventListView.getItems()) {
                 if (e.getId() == eventId) {
                     eventListView.getSelectionModel().select(e);
@@ -390,6 +532,41 @@ public class MainController {
             showEventDetailsById(eventId);
         } catch (Exception e) {
             showError(e.getMessage());
+        }
+    }
+
+    private void jumpToEvent(int eventId) {
+        mainTabPane.getSelectionModel().select(0);
+        methodFilterCombo.getSelectionModel().selectFirst();
+        statusFilterCombo.getSelectionModel().selectFirst();
+        commissionFilterCombo.getSelectionModel().selectFirst();
+        refreshEventList();
+        for (EventSummaryDTO e : eventListView.getItems()) {
+            if (e.getId() == eventId) {
+                eventListView.getSelectionModel().select(e);
+                return;
+            }
+        }
+        showEventDetailsById(eventId);
+    }
+
+    private void refreshUsersList() {
+        UserSummaryDTO previouslySelected = userListView.getSelectionModel().getSelectedItem();
+        String previousName = previouslySelected != null ? previouslySelected.getName() : null;
+        allUsers.clear();
+        try {
+            allUsers.addAll(engine.getAllUsers());
+        } catch (Exception ignored) {
+            // no users loaded yet
+        }
+        userListView.getItems().setAll(allUsers);
+        if (previousName != null) {
+            for (UserSummaryDTO u : userListView.getItems()) {
+                if (u.getName().equals(previousName)) {
+                    userListView.getSelectionModel().select(u);
+                    break;
+                }
+            }
         }
     }
 

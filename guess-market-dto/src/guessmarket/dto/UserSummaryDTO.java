@@ -8,15 +8,15 @@ public class UserSummaryDTO
     private final double balance;
     private final boolean blocked;
     private final boolean marketMaker;
-    private final List<Integer> activeEventIds;
+    private final List<Integer> relevantEventIds;
 
-    public UserSummaryDTO(final String name, final double balance, final boolean blocked, final boolean marketMaker, final List<Integer> activeEventIds)
+    public UserSummaryDTO(final String name, final double balance, final boolean blocked, final boolean marketMaker, final List<Integer> relevantEventIds)
     {
         this.name = name;
         this.balance = balance;
         this.blocked = blocked;
         this.marketMaker = marketMaker;
-        this.activeEventIds = activeEventIds;
+        this.relevantEventIds = relevantEventIds;
     }
 
     public String getName()
@@ -39,8 +39,9 @@ public class UserSummaryDTO
         return marketMaker;
     }
 
-    public List<Integer> getActiveEventIds()
+    /** Events this user owns (is MM for, regardless of status) or participates in - "participation / owner" per the spec. */
+    public List<Integer> getRelevantEventIds()
     {
-        return activeEventIds;
+        return relevantEventIds;
     }
 }
