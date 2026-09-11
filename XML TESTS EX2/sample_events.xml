@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Guess-Market>
+    <GM-events>
+        <GM-event name="Election Outcome 2026">
+            <id>1</id>
+            <description>Resolves YES if Candidate A wins the general election.</description>
+            <commission type="on-close">5</commission>
+            <GM-options>
+                <GM-option>Yes</GM-option>
+                <GM-option>No</GM-option>
+            </GM-options>
+            <GM-method>
+                <GM-LMSR>
+                    <b>100</b>
+                </GM-LMSR>
+            </GM-method>
+        </GM-event>
+        <GM-event name="Will It Rain Tomorrow?">
+            <id>2</id>
+            <description>Resolves YES if measurable rainfall is recorded at the reference station before 23:59 tomorrow.</description>
+            <commission type="on-purchase">1</commission>
+            <GM-options>
+                <GM-option>Yes</GM-option>
+                <GM-option>No</GM-option>
+            </GM-options>
+            <GM-method>
+                <GM-order-book initial="100" d="1" allow-mint="true"/>
+            </GM-method>
+        </GM-event>
+    </GM-events>
+    <GM-users>
+        <GM-user name="Zoe">
+            <initial-cash>500</initial-cash>
+            <GM-market-maker>
+                <event id="1"/>
+                <event id="2"/>
+            </GM-market-maker>
+        </GM-user>
+        <GM-user name="Bob">
+            <initial-cash>200</initial-cash>
+        </GM-user>
+        <GM-user name="Carol">
+            <initial-cash>200</initial-cash>
+        </GM-user>
+        <GM-user name="Alice">
+            <initial-cash>200</initial-cash>
+        </GM-user>
+    </GM-users>
+</Guess-Market>
