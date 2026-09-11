@@ -1,0 +1,67 @@
+.app-root {
+    -fx-font-family: "Segoe UI", sans-serif;
+    -fx-background-color: #ffffff;
+}
+
+.toolbar {
+    -fx-background-color: #f3f4f8;
+    -fx-border-color: #dadde6 transparent transparent transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.brand-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1a1d29;
+}
+
+.filepath-label {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: #5b6172;
+    -fx-background-color: #e9ebf1;
+    -fx-background-radius: 6;
+    -fx-padding: 5 9 5 9;
+}
+
+.primary-button {
+    -fx-background-color: #4c5fd5;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 6;
+    -fx-padding: 7 14 7 14;
+}
+
+.primary-button:hover {
+    -fx-background-color: #3f50c0;
+}
+
+.main-tabs .tab-header-area {
+    -fx-padding: 4 16 0 16;
+}
+
+.filter-bar {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e6e8ee transparent transparent transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.filter-label {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #8b90a0;
+}
+
+.detail-scroll {
+    -fx-background-color: transparent;
+}
+
+.detail-pane {
+    -fx-padding: 18;
+    -fx-spacing: 10;
+}
+
+.placeholder-label {
+    -fx-text-fill: #8b90a0;
+    -fx-font-size: 13px;
+}
