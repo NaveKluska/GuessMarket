@@ -49,14 +49,22 @@ public class OrderBookMarket
         final Order incoming = book.createOrder(userName, side, price, quantity);
 
         final List<Fill> fills = new ArrayList<>(book.match(incoming));
-        final List<Mint> mints = new ArrayList<>();
+        for (final Fill fill : fills) {
+            book.recordLastPrice(fill.getPrice());
+        }
 
+        final List<Mint> mints = new ArrayList<>();
         if (allowMint && side == OrderSide.BUY) {
             for (int otherIndex = 0; otherIndex < booksByOptionIndex.length; otherIndex++) {
                 if (otherIndex == optionIndex || incoming.isFullyFilled()) {
                     continue;
                 }
-                mints.addAll(mintAgainst(optionIndex, incoming, otherIndex, booksByOptionIndex[otherIndex]));
+                final List<Mint> newMints = mintAgainst(optionIndex, incoming, otherIndex, booksByOptionIndex[otherIndex]);
+                for (final Mint mint : newMints) {
+                    booksByOptionIndex[mint.getOptionIndexA()].recordLastPrice(mint.getPriceA());
+                    booksByOptionIndex[mint.getOptionIndexB()].recordLastPrice(mint.getPriceB());
+                }
+                mints.addAll(newMints);
             }
         }
 

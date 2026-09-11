@@ -13,6 +13,7 @@ public class OrderBook
     private final List<Order> buyOrders = new ArrayList<>();
     private final List<Order> sellOrders = new ArrayList<>();
     private long nextSequence = 0;
+    private Double lastPrice;
 
     /**
      * Submits a new order: matches it against the opposite side, then rests whatever's left.
@@ -100,6 +101,38 @@ public class OrderBook
     public void removeBuyOrder(final Order order)
     {
         buyOrders.remove(order);
+    }
+
+    public Double bestBid()
+    {
+        Double best = null;
+        for (final Order order : buyOrders) {
+            if (best == null || order.getPrice() > best) {
+                best = order.getPrice();
+            }
+        }
+        return best;
+    }
+
+    public Double bestAsk()
+    {
+        Double best = null;
+        for (final Order order : sellOrders) {
+            if (best == null || order.getPrice() < best) {
+                best = order.getPrice();
+            }
+        }
+        return best;
+    }
+
+    public void recordLastPrice(final double price)
+    {
+        this.lastPrice = price;
+    }
+
+    public MarketQuote getQuote()
+    {
+        return new MarketQuote(lastPrice, bestBid(), bestAsk());
     }
 
     private boolean priceCrosses(final Order incoming, final Order resting)

@@ -45,9 +45,19 @@ public class OrderBookEvent extends Event {
         return holdings;
     }
 
+    public MarketQuote getQuote(int optionIndex) {
+        return market.getBook(optionIndex).getQuote();
+    }
+
     @Override
     public double getOptionProbability(int optionIndex) {
-        // Placeholder until LAST/BID/ASK/MID stats are built - not a real market estimate yet.
+        final MarketQuote quote = getQuote(optionIndex);
+        if (quote.getMid() != null) {
+            return quote.getMid() / d;
+        }
+        if (quote.getLast() != null) {
+            return quote.getLast() / d;
+        }
         return 0.5;
     }
 
