@@ -9,11 +9,15 @@ import guessmarket.dto.orderbook.OptionBookDTO;
 import guessmarket.dto.orderbook.OrderBookEventDetailsDTO;
 import guessmarket.dto.orderbook.OrderDTO;
 import guessmarket.dto.orderbook.ParticipantHoldingDTO;
+import guessmarket.dto.UserSummaryDTO;
 import guessmarket.engine.core.api.MarketEngine;
+import guessmarket.engine.models.orderbook.OrderSide;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.concurrent.Task;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
@@ -23,6 +27,8 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -232,11 +238,17 @@ public class MainController {
         }
     }
 
-    private List<javafx.scene.Node> buildLmsrDetail(LmsrEventDetailsDTO dto) {
-        List<javafx.scene.Node> nodes = new ArrayList<>();
+    private List<Node> buildLmsrDetail(LmsrEventDetailsDTO dto) {
+        List<Node> nodes = new ArrayList<>();
         nodes.add(detailHeader(dto.getName(), dto.getDescription(), dto.getStatus(),
             "Account balance", money(dto.getAccountBalance()),
             "Commission collected", money(dto.getTotalCommissionCollected())));
+
+        List<String> optionNames = new ArrayList<>();
+        for (OptionDTO option : dto.getOptions()) {
+            optionNames.add(option.getName());
+        }
+        nodes.add(actionBar(dto.getId(), dto.getStatus(), optionNames));
 
         HBox priceCards = new HBox(12);
         for (OptionDTO option : dto.getOptions()) {
@@ -244,6 +256,10 @@ public class MainController {
         }
         priceCards.setPadding(new Insets(0, 0, 10, 0));
         nodes.add(priceCards);
+
+        if ("ACTIVE".equals(dto.getStatus())) {
+            nodes.add(lmsrBuyForm(dto.getId(), optionNames));
+        }
 
         TableView<TransactionDTO> table = new TableView<>();
         table.getColumns().add(column("User", "userName", 100));
@@ -262,15 +278,22 @@ public class MainController {
         return nodes;
     }
 
-    private List<javafx.scene.Node> buildOrderBookDetail(OrderBookEventDetailsDTO dto) {
-        List<javafx.scene.Node> nodes = new ArrayList<>();
+    private List<Node> buildOrderBookDetail(OrderBookEventDetailsDTO dto) {
+        List<Node> nodes = new ArrayList<>();
         nodes.add(detailHeader(dto.getName(), dto.getDescription(), dto.getStatus(),
             "Base value (d)", money(dto.getBaseValue()),
             "Account balance", money(dto.getAccountBalance())));
 
-        HBox books = new HBox(14);
+        List<String> optionNames = new ArrayList<>();
         for (OptionBookDTO book : dto.getOptionBooks()) {
-            books.getChildren().add(bookPanel(book));
+            optionNames.add(book.getOptionName());
+        }
+        nodes.add(actionBar(dto.getId(), dto.getStatus(), optionNames));
+
+        boolean active = "ACTIVE".equals(dto.getStatus());
+        HBox books = new HBox(14);
+        for (int i = 0; i < dto.getOptionBooks().size(); i++) {
+            books.getChildren().add(bookPanel(dto.getOptionBooks().get(i), dto.getId(), i, active));
         }
         nodes.add(books);
 
@@ -302,7 +325,7 @@ public class MainController {
         return nodes;
     }
 
-    private VBox bookPanel(OptionBookDTO book) {
+    private VBox bookPanel(OptionBookDTO book, int eventId, int optionIndex, boolean active) {
         Label header = new Label(book.getOptionName());
         header.getStyleClass().add("book-panel-title");
 
@@ -317,6 +340,9 @@ public class MainController {
         TableView<OrderDTO> asks = orderTable(book.getAsks());
 
         VBox panel = new VBox(6, header, stats, sectionLabel("Bids"), bids, sectionLabel("Asks"), asks);
+        if (active) {
+            panel.getChildren().add(obTradeForm(eventId, optionIndex));
+        }
         panel.getStyleClass().add("book-panel");
         panel.setPadding(new Insets(10));
         HBox.setHgrow(panel, Priority.ALWAYS);
@@ -332,6 +358,166 @@ public class MainController {
         table.setPlaceholder(new Label("—"));
         table.setPrefHeight(120);
         return table;
+    }
+
+    // ---------------------------------------------------------------- actions
+
+    @FunctionalInterface
+    private interface ThrowingAction {
+        void run() throws Exception;
+    }
+
+    private void runAction(ThrowingAction action, int eventId) {
+        try {
+            action.run();
+            reloadAndShowEvent(eventId);
+        } catch (Exception e) {
+            showError(e.getMessage());
+        }
+    }
+
+    private void reloadAndShowEvent(int eventId) {
+        try {
+            allEvents.clear();
+            allEvents.addAll(engine.getAllEvents());
+            refreshEventList();
+            for (EventSummaryDTO e : eventListView.getItems()) {
+                if (e.getId() == eventId) {
+                    eventListView.getSelectionModel().select(e);
+                    return;
+                }
+            }
+            showEventDetailsById(eventId);
+        } catch (Exception e) {
+            showError(e.getMessage());
+        }
+    }
+
+    private void showEventDetailsById(int eventId) {
+        try {
+            EventDetailsDTO details = engine.getEventDetails(eventId);
+            if (details instanceof LmsrEventDetailsDTO) {
+                eventDetailPane.getChildren().setAll(buildLmsrDetail((LmsrEventDetailsDTO) details));
+            } else if (details instanceof OrderBookEventDetailsDTO) {
+                eventDetailPane.getChildren().setAll(buildOrderBookDetail((OrderBookEventDetailsDTO) details));
+            }
+        } catch (Exception e) {
+            showError(e.getMessage());
+        }
+    }
+
+    private ComboBox<String> usersCombo() {
+        ComboBox<String> combo = new ComboBox<>();
+        try {
+            for (UserSummaryDTO user : engine.getAllUsers()) {
+                combo.getItems().add(user.getName());
+            }
+        } catch (Exception ignored) {
+            // no users loaded yet - combo just stays empty
+        }
+        if (!combo.getItems().isEmpty()) {
+            combo.getSelectionModel().selectFirst();
+        }
+        return combo;
+    }
+
+    private HBox actionBar(int eventId, String status, List<String> optionNames) {
+        ComboBox<String> actingAs = usersCombo();
+        HBox bar = new HBox(8, new Label("Acting as:"), actingAs);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.setPadding(new Insets(0, 0, 10, 0));
+
+        if ("NOT_ACTIVE".equals(status)) {
+            Button openBtn = new Button("Open Event");
+            openBtn.getStyleClass().add("primary-button");
+            openBtn.setTooltip(new Tooltip("Only this event's Market Maker can open it."));
+            openBtn.setOnAction(e -> runAction(() -> engine.openEvent(actingAs.getValue(), eventId), eventId));
+            bar.getChildren().add(openBtn);
+        } else if ("ACTIVE".equals(status)) {
+            for (int i = 0; i < optionNames.size(); i++) {
+                final int winningIndex = i;
+                Button closeBtn = new Button("Close: " + optionNames.get(i) + " wins");
+                closeBtn.setTooltip(new Tooltip("Only this event's Market Maker can close it."));
+                closeBtn.setOnAction(e -> runAction(() -> engine.closeEvent(actingAs.getValue(), eventId, winningIndex), eventId));
+                bar.getChildren().add(closeBtn);
+            }
+        }
+        return bar;
+    }
+
+    private HBox lmsrBuyForm(int eventId, List<String> optionNames) {
+        ComboBox<String> actingAs = usersCombo();
+        ComboBox<String> optionCombo = new ComboBox<>();
+        optionCombo.getItems().addAll(optionNames);
+        optionCombo.getSelectionModel().selectFirst();
+        TextField qtyField = new TextField();
+        qtyField.setPromptText("Qty");
+        qtyField.setPrefWidth(70);
+
+        Button buyBtn = new Button("Buy Shares");
+        buyBtn.getStyleClass().add("primary-button");
+        buyBtn.setOnAction(e -> {
+            int quantity = parsePositiveInt(qtyField.getText());
+            if (quantity <= 0) {
+                showError("Enter a valid positive quantity.");
+                return;
+            }
+            int optionIndex = optionCombo.getSelectionModel().getSelectedIndex();
+            runAction(() -> engine.buyShares(actingAs.getValue(), eventId, optionIndex, quantity), eventId);
+        });
+
+        HBox form = new HBox(8, new Label("Acting as:"), actingAs, optionCombo, qtyField, buyBtn);
+        form.setAlignment(Pos.CENTER_LEFT);
+        form.setPadding(new Insets(0, 0, 10, 0));
+        return form;
+    }
+
+    private HBox obTradeForm(int eventId, int optionIndex) {
+        ComboBox<String> actingAs = usersCombo();
+        ComboBox<String> sideCombo = new ComboBox<>();
+        sideCombo.getItems().addAll("Buy", "Sell");
+        sideCombo.getSelectionModel().selectFirst();
+        TextField qtyField = new TextField();
+        qtyField.setPromptText("Qty");
+        qtyField.setPrefWidth(55);
+        TextField priceField = new TextField();
+        priceField.setPromptText("Price");
+        priceField.setPrefWidth(55);
+
+        Button submitBtn = new Button("Submit Order");
+        submitBtn.getStyleClass().add("primary-button");
+        submitBtn.setOnAction(e -> {
+            int quantity = parsePositiveInt(qtyField.getText());
+            Double price = parsePositiveDouble(priceField.getText());
+            if (quantity <= 0 || price == null || price <= 0) {
+                showError("Enter a valid quantity and price.");
+                return;
+            }
+            OrderSide side = "Sell".equals(sideCombo.getValue()) ? OrderSide.SELL : OrderSide.BUY;
+            runAction(() -> engine.submitOrder(actingAs.getValue(), eventId, optionIndex, side, price, quantity), eventId);
+        });
+
+        HBox form = new HBox(6, actingAs, sideCombo, qtyField, priceField, submitBtn);
+        form.getStyleClass().add("tradebox");
+        form.setAlignment(Pos.CENTER_LEFT);
+        form.setPadding(new Insets(8, 0, 0, 0));
+        return form;
+    }
+
+    private int parsePositiveInt(String text) {
+        try {
+            return Integer.parseInt(text.trim());
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private Double parsePositiveDouble(String text) {
+        try {
+            return Double.parseDouble(text.trim());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ---------------------------------------------------------------- small builders
