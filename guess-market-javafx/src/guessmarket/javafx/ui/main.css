@@ -22,6 +22,7 @@
     -fx-background-color: #e9ebf1;
     -fx-background-radius: 6;
     -fx-padding: 5 9 5 9;
+    -fx-text-overrun: ellipsis;
 }
 
 .primary-button {
@@ -34,6 +35,20 @@
 
 .primary-button:hover {
     -fx-background-color: #3f50c0;
+}
+
+/* Closing an event is a decisive, resolving action - give it its own bold color so it doesn't
+   read as just another gray default button. */
+.close-button {
+    -fx-background-color: #1f9d68;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 6;
+    -fx-padding: 7 14 7 14;
+}
+
+.close-button:hover {
+    -fx-background-color: #188055;
 }
 
 .main-tabs .tab-header-area {
@@ -56,6 +71,59 @@
     -fx-background-color: transparent;
 }
 
+/* Selected list row: a light tint + left accent border instead of the default hard-to-read blue fill.
+   Scoped to .main-list specifically (the Events/Users lists) - NOT the bare .list-cell selector, because
+   a ComboBox's dropdown popup is also built from .list-cell internally, and this style would otherwise
+   leak into every dropdown and clash with its own arrow/border chrome. */
+.main-list .list-cell:filled:selected,
+.main-list .list-cell:filled:selected:focused,
+.main-list:focused .list-cell:filled:selected {
+    -fx-background-color: #eef0fd;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent transparent transparent #4c5fd5;
+    -fx-border-width: 0 0 0 4;
+}
+
+/* ComboBox: one consistent look for the box, its arrow button and its dropdown popup. */
+.combo-box {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d8dbe3;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+
+.combo-box:hover {
+    -fx-border-color: #b8bdd6;
+}
+
+.combo-box:focused, .combo-box:showing {
+    -fx-border-color: #4c5fd5;
+}
+
+.combo-box .arrow-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0 6 6 0;
+}
+
+.combo-box .arrow {
+    -fx-background-color: #5b6172;
+}
+
+.combo-box-popup .list-view {
+    -fx-border-color: #d8dbe3;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+
+.combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: #f3f4f8;
+}
+
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #eef0fd;
+    -fx-text-fill: #1a1d29;
+}
+
 .detail-pane {
     -fx-padding: 18;
     -fx-spacing: 10;
@@ -64,6 +132,19 @@
 .placeholder-label {
     -fx-text-fill: #8b90a0;
     -fx-font-size: 13px;
+}
+
+/* A small "ghost button" look for a hint that's really a call to action - a bordered chip in the
+   app's accent color, rather than a plain gray caption line easy to miss. */
+.hint-chip {
+    -fx-text-fill: #4c5fd5;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-border-color: #4c5fd5;
+    -fx-border-width: 1;
+    -fx-border-radius: 99;
+    -fx-background-radius: 99;
+    -fx-padding: 4 14 4 14;
 }
 
 /* event list cells */
@@ -90,6 +171,11 @@
 .pill-closed { -fx-background-color: rgba(200,68,63,0.12); -fx-text-fill: #c8443f; }
 .pill-lmsr { -fx-background-color: #eef0fd; -fx-text-fill: #4c5fd5; }
 .pill-ob { -fx-background-color: rgba(168,114,13,0.14); -fx-text-fill: #a8720d; }
+.pill-winner { -fx-background-color: #1f9d68; -fx-text-fill: white; }
+.pill-commission { -fx-background-color: #f3e8ff; -fx-text-fill: #7c3aed; }
+.pill-account { -fx-background-color: #e6f7f5; -fx-text-fill: #0f9488; }
+.pill-mm { -fx-background-color: rgba(219,39,119,0.12); -fx-text-fill: #db2777; }
+.pill-mm-tag { -fx-background-color: #4c5fd5; -fx-text-fill: white; }
 
 /* detail header */
 .detail-title {
@@ -116,11 +202,67 @@
     -fx-text-fill: #1a1d29;
 }
 
+/* An account balance reads as real money: same weight as meta-value, colored like the app's other money figures. */
+.meta-value-money {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1f9d68;
+}
+
+/* A standalone stat card, used everywhere a Status/Market Maker/Balance/etc. fact needs to read as
+   its own separate, flashy object rather than a segment glued into one flat gray strip. */
+.stat-tile {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #e6e8ee;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 10 18 10 18;
+}
+
 .section-label {
     -fx-font-size: 11px;
     -fx-font-weight: bold;
     -fx-text-fill: #8b90a0;
     -fx-padding: 8 0 2 0;
+}
+
+/* A titled, bordered card - used for the Users tab's two headline sections, so the title reads as a
+   heading (a header bar of its own) rather than blending into the content below it. */
+.section-card {
+    -fx-border-color: #d8dbe3;
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 10;
+}
+
+.section-card-header {
+    -fx-background-color: #f3f4f8;
+    -fx-background-radius: 10 10 0 0;
+    -fx-border-color: transparent transparent #d8dbe3 transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 10 14 10 14;
+}
+
+.section-card-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1a1d29;
+}
+
+.section-card-body {
+    -fx-padding: 14;
+}
+
+/* The event description gets its own boxed-off area, with a small caption, so it reads as
+   "this is the description" rather than blending into the rest of the header. */
+.description-box {
+    -fx-background-color: #f7f8fb;
+    -fx-border-color: #e6e8ee;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
 }
 
 /* price cards (LMSR) */
@@ -133,14 +275,45 @@
 
 .price-card-value {
     -fx-font-family: "Consolas", monospace;
-    -fx-font-size: 22px;
+    -fx-font-size: 27px;
     -fx-font-weight: bold;
     -fx-text-fill: #1f9d68;
 }
 
 .price-card-chance {
-    -fx-font-size: 11px;
-    -fx-text-fill: #8b90a0;
+    -fx-font-size: 12.5px;
+    -fx-text-fill: #5b6172;
+}
+
+.price-card-shares {
+    -fx-font-size: 12.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1a1d29;
+}
+
+/* A price card the user has clicked to trade - the indigo accent used everywhere else in the app
+   for "this is the selected/active thing" (list selection, focused ComboBox border). */
+.price-card-selected {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #4c5fd5;
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+/* Order Book "your position" cards: shares held is the bold headline, amount paid a smaller money-green caption. */
+.position-card-shares {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 19px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1a1d29;
+}
+
+.position-card-paid {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1f9d68;
 }
 
 /* order book panels */
@@ -179,4 +352,48 @@
     -fx-background-color: #f3f4f8;
     -fx-background-radius: 6;
     -fx-padding: 8;
+}
+
+.pl-positive {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1f9d68;
+}
+
+.pl-negative {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #c8443f;
+}
+
+.winner-banner {
+    -fx-background-color: rgba(31,157,104,0.12);
+    -fx-background-radius: 8;
+    -fx-border-color: #1f9d68;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+
+.winner-banner-label {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1f9d68;
+}
+
+.price-card-winner {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #1f9d68;
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+.book-panel-winner {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #1f9d68;
+    -fx-border-width: 2;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
 }

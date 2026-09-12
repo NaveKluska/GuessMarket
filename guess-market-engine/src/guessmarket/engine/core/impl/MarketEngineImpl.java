@@ -20,6 +20,7 @@ import guessmarket.engine.models.orderbook.Fill;
 import guessmarket.engine.models.orderbook.MarketQuote;
 import guessmarket.engine.models.orderbook.Mint;
 import guessmarket.engine.models.orderbook.Order;
+import guessmarket.engine.models.orderbook.OrderBook;
 import guessmarket.engine.models.orderbook.OrderBookEvent;
 import guessmarket.engine.models.orderbook.OrderSide;
 import guessmarket.engine.models.orderbook.TradeOutcome;
@@ -28,6 +29,7 @@ import guessmarket.engine.models.Transaction;
 import guessmarket.engine.models.User;
 import guessmarket.engine.billing.api.CommissionCalculator;
 import guessmarket.engine.parsing.api.FileParser;
+import guessmarket.engine.util.Amounts;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -212,6 +214,7 @@ public class MarketEngineImpl implements MarketEngine
         event.addParticipant(memberName);
 
         if (commission > 0) {
+            event.recordCommissionPaid(memberName, commission);
             final User mm = users.get(eventMarketMakers.get(eventId));
             if (mm != null) {
                 mm.increaseBalance(commission);
@@ -257,11 +260,16 @@ public class MarketEngineImpl implements MarketEngine
         obEvent.addParticipant(userName);
 
         if (side == OrderSide.SELL) {
+            // Only check that the shares exist and aren't already promised to another resting ask -
+            // don't touch holdings yet. The shares stay the seller's (and would still pay out at
+            // close) until a buyer actually takes them; see applyFill, where ownership actually
+            // transfers at the moment of a real trade, not merely on placing the ask.
             final int held = obEvent.getHoldings().get(userName, optionIndex);
-            if (held < quantity) {
-                throw new IllegalArgumentException("User '" + userName + "' only holds " + held + " shares of this option, cannot sell " + quantity + ".");
+            final int alreadyOffered = sellReservedQuantity(obEvent.getMarket().getBook(optionIndex), userName);
+            final int available = held - alreadyOffered;
+            if (available < quantity) {
+                throw new IllegalArgumentException("User '" + userName + "' only has " + available + " unreserved shares of this option available to sell (holds " + held + ", " + alreadyOffered + " already offered in other open asks), cannot sell " + quantity + ".");
             }
-            obEvent.getHoldings().decrease(userName, optionIndex, quantity);
         }
 
         final TradeOutcome outcome = obEvent.getMarket().submit(userName, optionIndex, side, price, quantity);
@@ -289,14 +297,34 @@ public class MarketEngineImpl implements MarketEngine
                 buyer.setBlocked(true);
             }
             obEvent.getHoldings().increase(buyerName, optionIndex, fill.getQuantity());
+            obEvent.recordSpent(buyerName, tradeValue + commission);
+            obEvent.recordSpentOnOption(buyerName, optionIndex, tradeValue);
         }
 
         final User seller = users.get(sellerName);
         if (seller != null) {
             seller.increaseBalance(tradeValue);
+            obEvent.getHoldings().decrease(sellerName, optionIndex, fill.getQuantity());
+            obEvent.recordReceived(sellerName, tradeValue);
         }
 
+        if (commission > 0) {
+            obEvent.recordCommissionPaid(buyerName, commission);
+        }
         creditCommissionToMm(obEvent, commission);
+    }
+
+    /** How many shares of this option the user is already offering across their other still-open
+     * asks - what a new sell order must be checked against, since those shares aren't gone yet
+     * but are already spoken for. */
+    private int sellReservedQuantity(final OrderBook book, final String userName) {
+        int total = 0;
+        for (final Order order : book.getSellOrders()) {
+            if (order.getUserName().equals(userName)) {
+                total += order.getQuantity();
+            }
+        }
+        return total;
     }
 
     private void applyMint(final OrderBookEvent obEvent, final Mint mint) {
@@ -315,9 +343,14 @@ public class MarketEngineImpl implements MarketEngine
                 user.setBlocked(true);
             }
             obEvent.getHoldings().increase(userName, optionIndex, quantity);
+            obEvent.recordSpent(userName, cost + commission);
+            obEvent.recordSpentOnOption(userName, optionIndex, cost);
         }
 
         obEvent.increaseAccountBalance(cost);
+        if (commission > 0) {
+            obEvent.recordCommissionPaid(userName, commission);
+        }
         creditCommissionToMm(obEvent, commission);
     }
 
@@ -348,13 +381,13 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalArgumentException("Event " + eventId + " cannot be opened (current status: " + event.getStatus() + ").");
         }
         if (mm.isBlocked()) {
-            throw new IllegalArgumentException("User '" + mmName + "' is blocked due to a negative balance and cannot perform further actions.");
+            throw new IllegalArgumentException("Event " + eventId + " cannot be opened because Market Maker '" + mmName + "' has a negative balance and cannot cover the cost of subsidizing it.");
         }
 
         if (event instanceof LmsrEvent) {
             final double subsidy = ((LmsrEvent) event).calculateInitialSubsidy();
             if (mm.getBalance() < subsidy) {
-                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + mm.getBalance() + ") to open Event " + eventId + " (requires a subsidy of " + subsidy + ").");
+                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + Amounts.format(mm.getBalance()) + ") to open Event " + eventId + " (requires a subsidy of " + Amounts.format(subsidy) + ").");
             }
             mm.decreaseBalance(subsidy);
             event.increaseAccountBalance(subsidy);
@@ -364,13 +397,16 @@ public class MarketEngineImpl implements MarketEngine
             final OrderBookEvent obEvent = (OrderBookEvent) event;
             final double cost = obEvent.getInitial() * (double) obEvent.getD();
             if (mm.getBalance() < cost) {
-                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + mm.getBalance() + ") to open Event " + eventId + " (requires " + cost + ").");
+                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + Amounts.format(mm.getBalance()) + ") to open Event " + eventId + " (requires " + Amounts.format(cost) + ").");
             }
             mm.decreaseBalance(cost);
             event.increaseAccountBalance(cost);
+            final double costPerOption = cost / event.getOptions().size();
             for (int i = 0; i < event.getOptions().size(); i++) {
                 obEvent.getHoldings().increase(mmName, i, obEvent.getInitial());
+                obEvent.recordSpentOnOption(mmName, i, costPerOption);
             }
+            obEvent.recordSpent(mmName, cost);
             obEvent.addParticipant(mmName);
             event.activate();
         } else {
@@ -395,9 +431,11 @@ public class MarketEngineImpl implements MarketEngine
         if (event.getStatus() != EventStatus.ACTIVE) {
             throw new IllegalArgumentException("Event " + eventId + " cannot be closed (current status: " + event.getStatus() + ").");
         }
-        if (mm.isBlocked()) {
-            throw new IllegalArgumentException("User '" + mmName + "' is blocked due to a negative balance and cannot perform further actions.");
-        }
+        // Deliberately no isBlocked() check here, unlike opening an event or trading: closing is
+        // how a blocked MM's event gets resolved and everyone's money paid out. Blocking a market
+        // maker from ever closing their own event would strand every participant's funds in it
+        // permanently, with no way to unblock the MM either (closing is what could pay them back
+        // above zero).
 
         if (winningOptionIndex < 0 || winningOptionIndex >= event.getOptions().size()) {
             throw new IllegalArgumentException("Invalid winning option selection.");
@@ -440,12 +478,16 @@ public class MarketEngineImpl implements MarketEngine
         event.decreaseAccountBalance(winAmount);
         if (closeCommission > 0) {
             event.collectCommission(closeCommission);
+            event.recordCommissionPaid(winnerName, closeCommission);
             mm.increaseBalance(closeCommission);
         }
 
         final User winner = users.get(winnerName);
         if (winner != null) {
             winner.increaseBalance(payout);
+        }
+        if (event instanceof OrderBookEvent) {
+            ((OrderBookEvent) event).recordReceived(winnerName, payout);
         }
     }
 
@@ -514,7 +556,8 @@ public class MarketEngineImpl implements MarketEngine
             optionNames,
             event.getStatus().name(),
             (event instanceof LmsrEvent) ? "LMSR" : "ORDER_BOOK",
-            eventMarketMakers.get(event.getId())
+            eventMarketMakers.get(event.getId()),
+            event.getAccountBalance()
         );
     }
 
@@ -535,13 +578,14 @@ public class MarketEngineImpl implements MarketEngine
 
         final List<TransactionDTO> transactionDTOs = new ArrayList<>();
         for (final Transaction tx : event.getTransactions()) {
-            transactionDTOs.add(new TransactionDTO(tx.getUserName(), tx.getOptionName(), tx.getQuantity(), tx.getPricePaid(), tx.getTimestamp()));
+            transactionDTOs.add(new TransactionDTO(tx.getUserName(), tx.getOptionName(), tx.getQuantity(), tx.getPricePaid(), tx.getCommissionPaid(), tx.getTimestamp()));
         }
 
         return new LmsrEventDetailsDTO(
             event.getId(), event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
             event.getStatus().name(), event.getAccountBalance(), event.getTotalCommissionCollected(),
-            optionDTOs, transactionDTOs, event.getWinningOptionName()
+            optionDTOs, transactionDTOs, event.getWinningOptionName(), event.getCommissionPaidByUserMap(),
+            eventMarketMakers.get(event.getId())
         );
     }
 
@@ -556,24 +600,30 @@ public class MarketEngineImpl implements MarketEngine
             optionBooks.add(new OptionBookDTO(option.getName(), quote.getLast(), quote.getBid(), quote.getAsk(), quote.getMid(), quote.getSpread(), bids, asks));
         }
 
+        final boolean closed = event.getStatus() == EventStatus.CLOSED;
         final List<ParticipantHoldingDTO> participants = new ArrayList<>();
         for (final String participantName : event.getParticipants()) {
             final List<Integer> holdings = new ArrayList<>();
+            final List<Double> paidByOption = new ArrayList<>();
             double estimatedValue = 0.0;
             for (int i = 0; i < options.size(); i++) {
                 final int quantity = event.getHoldings().get(participantName, i);
                 holdings.add(quantity);
+                paidByOption.add(event.getSpentOnOption(participantName, i));
                 final MarketQuote quote = event.getQuote(i);
                 final Double priceEstimate = quote.getMid() != null ? quote.getMid() : quote.getLast();
                 estimatedValue += quantity * (priceEstimate != null ? priceEstimate : event.getD() / 2.0);
             }
-            participants.add(new ParticipantHoldingDTO(participantName, holdings, estimatedValue));
+            final double commissionPaid = event.getCommissionPaidBy(participantName);
+            final Double profitOrLoss = closed ? event.getProfitOrLoss(participantName) : null;
+            participants.add(new ParticipantHoldingDTO(participantName, holdings, paidByOption, estimatedValue, commissionPaid, profitOrLoss));
         }
 
         return new OrderBookEventDetailsDTO(
             event.getId(), event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
             event.getStatus().name(), event.getAccountBalance(), event.getD(), event.isAllowMint(),
-            optionBooks, participants, event.getWinningOptionName()
+            optionBooks, participants, event.getWinningOptionName(),
+            eventMarketMakers.get(event.getId())
         );
     }
 

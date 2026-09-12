@@ -29,6 +29,12 @@ public class User {
             throw new IllegalArgumentException("Amount to increase balance by cannot be negative.");
         }
         this.initialCash += amount;
+        // Being blocked is a consequence of a negative balance, not a permanent status - once a
+        // payout or other credit brings the balance back to zero or above, there is no longer any
+        // reason to keep refusing this user's actions.
+        if (this.initialCash >= 0) {
+            this.blocked = false;
+        }
     }
 
     public void decreaseBalance(double amount) {

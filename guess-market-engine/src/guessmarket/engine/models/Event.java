@@ -2,8 +2,10 @@ package guessmarket.engine.models;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public abstract class Event implements Serializable
@@ -21,6 +23,7 @@ public abstract class Event implements Serializable
     private final List<Transaction> transactions;
     private String winningOptionName;
     private final Set<String> participants = new HashSet<>();
+    private final Map<String, Double> commissionPaidByUser = new HashMap<>();
 
     public Event(int id, String name, String description, int commission, CommissionType commissionType, List<Option> options)
     {
@@ -113,7 +116,7 @@ public abstract class Event implements Serializable
             this.totalCommissionCollected += commission;
         }
 
-        final Transaction transaction = new Transaction(memberName, option.getName(), quantity, cost);
+        final Transaction transaction = new Transaction(memberName, option.getName(), quantity, cost, commission);
         this.transactions.add(transaction);
     }
 
@@ -142,6 +145,23 @@ public abstract class Event implements Serializable
 
     public void collectCommission(final double commission) {
         this.totalCommissionCollected += commission;
+    }
+
+    /** Records that the given user paid this much commission on this event, regardless of phase (on-purchase or on-close). */
+    public void recordCommissionPaid(final String userName, final double amount) {
+        if (amount <= 0) {
+            return;
+        }
+        commissionPaidByUser.merge(userName, amount, Double::sum);
+    }
+
+    public double getCommissionPaidBy(final String userName) {
+        return commissionPaidByUser.getOrDefault(userName, 0.0);
+    }
+
+    /** Returns a defensive copy so callers cannot mutate the engine's internal ledger. */
+    public Map<String, Double> getCommissionPaidByUserMap() {
+        return new HashMap<>(commissionPaidByUser);
     }
 
     public void increaseAccountBalance(final double amount) {

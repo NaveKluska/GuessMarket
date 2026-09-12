@@ -18,19 +18,20 @@ import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.text.TextAlignment;
 import javafx.scene.control.Alert;
-import javafx.scene.control.TabPane;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ProgressBar;
+import javafx.scene.control.Spinner;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
-import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -38,16 +39,28 @@ import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 
 import java.io.File;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class MainController {
 
     private static final int SIMULATED_LOAD_DELAY_MS = 1200;
+    // Locale.ENGLISH is mandatory here, not cosmetic: without it, month names silently follow the JVM's
+    // default locale (e.g. rendering "ספט" instead of "Sep" on a Hebrew-locale machine), and the spec
+    // requires all input/output to be English only.
+    private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm:ss", java.util.Locale.ENGLISH);
 
     private MarketEngine engine;
     private final List<EventSummaryDTO> allEvents = new ArrayList<>();
     private final List<UserSummaryDTO> allUsers = new ArrayList<>();
+    /** Tracks which event's full detail+trade view is currently shown inline in the Users tab, so it survives a refresh. */
+    private String selectedInlineUserName;
+    private Integer selectedInlineEventId;
 
     @FXML
     private Label filePathLabel;
@@ -57,9 +70,6 @@ public class MainController {
 
     @FXML
     private Button loadFileButton;
-
-    @FXML
-    private TabPane mainTabPane;
 
     @FXML
     private ComboBox<String> methodFilterCombo;
@@ -144,6 +154,9 @@ public class MainController {
             loadProgressBar.setManaged(false);
             loadFileButton.setDisable(false);
             filePathLabel.setText(selectedFile.getAbsolutePath());
+            filePathLabel.setTooltip(new Tooltip(selectedFile.getAbsolutePath()));
+            selectedInlineUserName = null;
+            selectedInlineEventId = null;
             allEvents.clear();
             allEvents.addAll(loadTask.getValue());
             refreshEventList();
@@ -220,10 +233,14 @@ public class MainController {
             name.getStyleClass().add("event-cell-name");
 
             HBox pills = new HBox(6, pill(readableType(event.getType()), typePillClass(event.getType())), pill(readableStatus(event.getStatus()), statusPillClass(event.getStatus())));
-            Label meta = new Label(readableCommission(event.getCommissionType()) + " · " + event.getCommission() + "%");
-            meta.getStyleClass().add("event-cell-meta");
 
-            VBox box = new VBox(4, name, pills, meta);
+            FlowPane metaPills = new FlowPane(6, 4,
+                pill(readableCommission(event.getCommissionType()) + " · " + event.getCommission() + "%", "pill-commission"),
+                pill("Account: " + money(event.getAccountBalance()), "pill-account"),
+                pill("MM: " + event.getMarketMakerName(), "pill-mm")
+            );
+
+            VBox box = new VBox(4, name, pills, metaPills);
             box.setPadding(new Insets(4, 2, 4, 2));
             setGraphic(box);
         }
@@ -239,10 +256,13 @@ public class MainController {
             }
             Label name = new Label(user.getName());
             name.getStyleClass().add("event-cell-name");
-            Label balance = new Label(money(user.getBalance()) + (user.isBlocked() ? "  ·  blocked" : ""));
-            balance.getStyleClass().add("event-cell-meta");
 
-            VBox box = new VBox(4, name, balance);
+            FlowPane pills = new FlowPane(6, 4, pill(money(user.getBalance()), "pill-account"));
+            if (user.isBlocked()) {
+                pills.getChildren().add(pill("BLOCKED", "pill-closed"));
+            }
+
+            VBox box = new VBox(4, name, pills);
             box.setPadding(new Insets(4, 2, 4, 2));
             setGraphic(box);
         }
@@ -260,25 +280,81 @@ public class MainController {
 
         Label nameLabel = new Label(user.getName());
         nameLabel.getStyleClass().add("detail-title");
-        nodes.add(nameLabel);
+        nodes.add(centerLabel(nameLabel));
 
-        HBox balanceTile = new HBox(24, metaBox("Account balance", money(user.getBalance())), metaBox("Blocked", user.isBlocked() ? "Yes" : "No"));
-        balanceTile.setPadding(new Insets(8, 0, 14, 0));
-        nodes.add(balanceTile);
+        HBox balanceRow = new HBox(14,
+            statTile("Account balance", money(user.getBalance()), "meta-value-money"),
+            statTile("Blocked", user.isBlocked() ? "Yes" : "No", user.isBlocked() ? "pl-negative" : "pl-positive"));
+        balanceRow.setAlignment(Pos.CENTER);
+        nodes.add(balanceRow);
 
-        nodes.add(sectionLabel("Events participation / owner"));
-        if (user.getRelevantEventIds().isEmpty()) {
-            nodes.add(placeholder("Not participating in, or owning, any event yet."));
+        SectionCard participationSection = sectionCard("Events participation / owner");
+        nodes.add(participationSection.outer());
+
+        if (allEvents.isEmpty()) {
+            participationSection.body().getChildren().add(centerLabel(placeholder("No events loaded yet.")));
         } else {
-            for (Integer eventId : user.getRelevantEventIds()) {
-                nodes.add(participationCard(user.getName(), eventId));
+            VBox singleEventBox = new VBox(10);
+            boolean selectedEventStillListed = false;
+            for (EventSummaryDTO event : allEvents) {
+                participationSection.body().getChildren().add(participationCard(user.getName(), event.getId(), singleEventBox));
+                if (event.getId() == (selectedInlineEventId != null ? selectedInlineEventId : -1)) {
+                    selectedEventStillListed = true;
+                }
             }
+
+            SectionCard singleEventSection = sectionCard("Single event details and trade");
+            if (user.getName().equals(selectedInlineUserName) && selectedEventStillListed) {
+                populateSingleEventBox(selectedInlineEventId, singleEventBox);
+            } else {
+                singleEventBox.getChildren().add(centerLabel(placeholder("Click an event above to see its full details and trade here.")));
+            }
+            singleEventSection.body().getChildren().add(singleEventBox);
+            nodes.add(singleEventSection.outer());
         }
 
         userDetailPane.getChildren().setAll(nodes);
     }
 
-    private VBox participationCard(String userName, int eventId) {
+    /** A titled, bordered card: a header bar (visually distinct from body content) followed by a body area to add content to. */
+    private record SectionCard(VBox outer, VBox body) {}
+
+    private SectionCard sectionCard(String title) {
+        Label headerLabel = new Label(title);
+        headerLabel.getStyleClass().add("section-card-title");
+        HBox headerBar = new HBox(headerLabel);
+        headerBar.setAlignment(Pos.CENTER);
+        headerBar.getStyleClass().add("section-card-header");
+
+        VBox body = new VBox(10);
+        body.getStyleClass().add("section-card-body");
+
+        VBox outer = new VBox(headerBar, body);
+        outer.getStyleClass().add("section-card");
+        return new SectionCard(outer, body);
+    }
+
+    /** Renders the same full single-event detail+trade view used by the Events tab, inline within the Users tab, interactive as this user. */
+    private void populateSingleEventBox(int eventId, VBox box) {
+        try {
+            EventDetailsDTO details = engine.getEventDetails(eventId);
+            Runnable onChange = () -> {
+                allEvents.clear();
+                allEvents.addAll(engine.getAllEvents());
+                refreshEventList();
+                refreshUsersList();
+            };
+            if (details instanceof LmsrEventDetailsDTO) {
+                box.getChildren().setAll(buildLmsrDetail((LmsrEventDetailsDTO) details, selectedInlineUserName, onChange));
+            } else if (details instanceof OrderBookEventDetailsDTO) {
+                box.getChildren().setAll(buildOrderBookDetail((OrderBookEventDetailsDTO) details, selectedInlineUserName, onChange));
+            }
+        } catch (Exception e) {
+            box.getChildren().setAll(placeholder(e.getMessage()));
+        }
+    }
+
+    private VBox participationCard(String userName, int eventId, VBox singleEventBox) {
         EventSummaryDTO summary = null;
         for (EventSummaryDTO e : allEvents) {
             if (e.getId() == eventId) {
@@ -290,9 +366,13 @@ public class MainController {
         card.getStyleClass().add("book-panel");
         card.setPadding(new Insets(10));
         card.setCursor(javafx.scene.Cursor.HAND);
-        card.setOnMouseClicked(e -> jumpToEvent(eventId));
+        card.setOnMouseClicked(e -> {
+            selectedInlineUserName = userName;
+            selectedInlineEventId = eventId;
+            populateSingleEventBox(eventId, singleEventBox);
+        });
         if (summary == null) {
-            card.getChildren().add(placeholder("Event " + eventId + " (details unavailable)."));
+            card.getChildren().add(centerLabel(placeholder("Event " + eventId + " (details unavailable).")));
             return card;
         }
 
@@ -300,32 +380,43 @@ public class MainController {
         Label title = new Label(summary.getName());
         title.getStyleClass().add("book-panel-title");
         HBox pills = new HBox(6, pill(readableType(summary.getType()), typePillClass(summary.getType())), pill(readableStatus(summary.getStatus()), statusPillClass(summary.getStatus())));
-        Label role = new Label("Role: " + (isMm ? "Market Maker" : "Participant"));
-        role.getStyleClass().add("event-cell-meta");
-        Label hint = new Label("Click to open in Events →");
-        hint.getStyleClass().add("placeholder-label");
-        card.getChildren().addAll(title, pills, role, hint);
+        if (isMm) {
+            pills.getChildren().add(pill("MARKET MAKER", "pill-mm-tag"));
+        }
+        pills.setAlignment(Pos.CENTER);
+        Label hint = new Label("Click to view details & trade below ↓");
+        hint.getStyleClass().add("hint-chip");
+        HBox hintWrap = new HBox(hint);
+        hintWrap.setAlignment(Pos.CENTER);
+        card.getChildren().addAll(centerLabel(title), pills, hintWrap);
 
         try {
             EventDetailsDTO details = engine.getEventDetails(eventId);
             if (details instanceof LmsrEventDetailsDTO) {
                 LmsrEventDetailsDTO lmsr = (LmsrEventDetailsDTO) details;
-                List<TransactionDTO> userTrades = new ArrayList<>();
+                Map<String, Integer> sharesByOption = new LinkedHashMap<>();
+                for (OptionDTO option : lmsr.getOptions()) {
+                    sharesByOption.put(option.getName(), 0);
+                }
+                boolean hasTraded = false;
                 for (TransactionDTO tx : lmsr.getTransactions()) {
                     if (tx.getUserName().equals(userName)) {
-                        userTrades.add(tx);
+                        hasTraded = true;
+                        sharesByOption.merge(tx.getOptionName(), tx.getQuantity(), Integer::sum);
                     }
                 }
-                if (userTrades.isEmpty()) {
-                    card.getChildren().add(placeholder("No trades by this user yet."));
+                if (!hasTraded) {
+                    card.getChildren().add(centerLabel(placeholder("No trades by this user yet.")));
                 } else {
-                    TableView<TransactionDTO> table = new TableView<>();
-                    table.getColumns().add(column("Option", "optionName", 90));
-                    table.getColumns().add(column("Qty", "quantity", 60));
-                    table.getColumns().add(moneyColumn("Paid", "pricePaid", 80));
-                    table.getItems().addAll(userTrades);
-                    table.setPrefHeight(100);
-                    card.getChildren().add(table);
+                    // A quick glance at this user's position - not the full trade-by-trade ledger,
+                    // which belongs only in the detailed view below, not in this summary card.
+                    FlowPane tiles = new FlowPane(8, 8);
+                    tiles.setAlignment(Pos.CENTER);
+                    for (OptionDTO option : lmsr.getOptions()) {
+                        int qty = sharesByOption.get(option.getName());
+                        tiles.getChildren().add(statTile(option.getName(), qty + " shares", "meta-value"));
+                    }
+                    card.getChildren().add(tiles);
                 }
             } else if (details instanceof OrderBookEventDetailsDTO) {
                 OrderBookEventDetailsDTO ob = (OrderBookEventDetailsDTO) details;
@@ -337,30 +428,33 @@ public class MainController {
                     }
                 }
                 if (match == null) {
-                    card.getChildren().add(placeholder("No holdings by this user yet."));
+                    card.getChildren().add(centerLabel(placeholder("No holdings by this user yet.")));
                 } else {
-                    StringBuilder holdingsText = new StringBuilder();
+                    FlowPane tiles = new FlowPane(8, 8);
+                    tiles.setAlignment(Pos.CENTER);
                     for (int i = 0; i < ob.getOptionBooks().size(); i++) {
-                        if (i > 0) {
-                            holdingsText.append("   ");
-                        }
-                        holdingsText.append(ob.getOptionBooks().get(i).getOptionName()).append(": ").append(match.getHoldingsByOption().get(i));
+                        int qty = match.getHoldingsByOption().get(i);
+                        tiles.getChildren().add(statTile(ob.getOptionBooks().get(i).getOptionName(), qty + " shares", "meta-value"));
                     }
-                    Label holdings = new Label(holdingsText.toString());
-                    holdings.getStyleClass().add("meta-value");
-                    Label value = new Label("Est. value: " + money(match.getEstimatedValue()));
-                    value.getStyleClass().add("event-cell-meta");
-                    card.getChildren().addAll(holdings, value);
+                    tiles.getChildren().add(statTile("Est. value", money(match.getEstimatedValue()), "meta-value-money"));
+                    card.getChildren().add(tiles);
+
+                    if ("CLOSED".equals(ob.getStatus()) && match.getProfitOrLoss() != null) {
+                        double pl = match.getProfitOrLoss();
+                        Label plLabel = new Label((pl >= 0 ? "Profit: " : "Loss: ") + money(Math.abs(pl)));
+                        plLabel.getStyleClass().add(pl >= 0 ? "pl-positive" : "pl-negative");
+                        card.getChildren().add(centerLabel(plLabel));
+                    }
                 }
             }
         } catch (Exception e) {
-            card.getChildren().add(placeholder(e.getMessage()));
+            card.getChildren().add(centerLabel(placeholder(e.getMessage())));
         }
 
         return card;
     }
 
-    // ---------------------------------------------------------------- event details
+    // ---------------------------------------------------------------- event details (read-only - trading only happens from the Users tab)
 
     private void showEventDetails(EventSummaryDTO selected) {
         if (selected == null) {
@@ -369,129 +463,270 @@ public class MainController {
         }
         try {
             EventDetailsDTO details = engine.getEventDetails(selected.getId());
+            Runnable onChange = () -> reloadAndShowEvent(selected.getId());
             if (details instanceof LmsrEventDetailsDTO) {
-                eventDetailPane.getChildren().setAll(buildLmsrDetail((LmsrEventDetailsDTO) details));
+                eventDetailPane.getChildren().setAll(buildLmsrDetail((LmsrEventDetailsDTO) details, null, onChange));
             } else if (details instanceof OrderBookEventDetailsDTO) {
-                eventDetailPane.getChildren().setAll(buildOrderBookDetail((OrderBookEventDetailsDTO) details));
+                eventDetailPane.getChildren().setAll(buildOrderBookDetail((OrderBookEventDetailsDTO) details, null, onChange));
             }
         } catch (Exception e) {
             showError(e.getMessage());
         }
     }
 
-    private List<Node> buildLmsrDetail(LmsrEventDetailsDTO dto) {
+    /**
+     * Builds the full detail view for an LMSR event. When viewingUserName is null (Events tab) the view is
+     * read-only and shows every trade; when non-null (embedded in the Users tab) it becomes interactive as that
+     * user - open/close appear only if they're the MM, buying is always available, and trade history is filtered
+     * down to just their own trades.
+     */
+    private List<Node> buildLmsrDetail(LmsrEventDetailsDTO dto, String viewingUserName, Runnable onChange) {
         List<Node> nodes = new ArrayList<>();
-        nodes.add(detailHeader(dto.getName(), dto.getDescription(), dto.getStatus(),
+        // Viewed from a specific person's page (Users tab), this figure should be their own
+        // commission, not the event-wide total - otherwise it reads as "your commission" but
+        // silently shows everyone's. The read-only Events tab has no single viewer, so it keeps
+        // showing the event-wide total there.
+        String commissionLabel = viewingUserName != null ? "Your commission" : "Commission collected";
+        double commissionValue = viewingUserName != null ? dto.getCommissionPaidBy(viewingUserName) : dto.getTotalCommissionCollected();
+        nodes.add(detailHeader(dto.getName(), dto.getDescription(), dto.getStatus(), dto.getMarketMakerName(),
+            readableCommission(dto.getCommissionType()) + " · " + dto.getCommission() + "%",
             "Account balance", money(dto.getAccountBalance()),
-            "Commission collected", money(dto.getTotalCommissionCollected())));
+            commissionLabel, money(commissionValue)));
+
+        if (dto.getWinningOptionName() != null) {
+            nodes.add(winnerBanner(dto.getWinningOptionName()));
+        }
 
         List<String> optionNames = new ArrayList<>();
         for (OptionDTO option : dto.getOptions()) {
             optionNames.add(option.getName());
         }
-        nodes.add(actionBar(dto.getId(), dto.getStatus(), optionNames));
 
-        HBox priceCards = new HBox(12);
-        for (OptionDTO option : dto.getOptions()) {
-            priceCards.getChildren().add(priceCard(option));
+        boolean isMm = viewingUserName != null && viewingUserName.equals(dto.getMarketMakerName());
+        if (isMm && !"CLOSED".equals(dto.getStatus())) {
+            nodes.add(actionBar(dto.getId(), dto.getStatus(), optionNames, viewingUserName, onChange));
         }
-        priceCards.setPadding(new Insets(0, 0, 10, 0));
-        nodes.add(priceCards);
 
-        if ("ACTIVE".equals(dto.getStatus())) {
-            nodes.add(lmsrBuyForm(dto.getId(), optionNames));
+        if (viewingUserName != null && "ACTIVE".equals(dto.getStatus())) {
+            nodes.add(interactiveLmsrCards(dto.getId(), dto.getOptions(), viewingUserName, onChange));
+        } else {
+            FlowPane priceCards = new FlowPane(12, 10);
+            priceCards.setAlignment(Pos.CENTER);
+            for (OptionDTO option : dto.getOptions()) {
+                priceCards.getChildren().add(priceCard(option, option.getName().equals(dto.getWinningOptionName())));
+            }
+            priceCards.setPadding(new Insets(0, 0, 10, 0));
+            nodes.add(priceCards);
+        }
+
+        List<TransactionDTO> history = new ArrayList<>(dto.getTransactions());
+        Collections.reverse(history);
+        if (viewingUserName != null) {
+            history.removeIf(tx -> !tx.getUserName().equals(viewingUserName));
         }
 
         TableView<TransactionDTO> table = new TableView<>();
-        table.getColumns().add(column("User", "userName", 100));
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
+        if (viewingUserName == null) {
+            table.getColumns().add(column("User", "userName", 100));
+        }
         table.getColumns().add(column("Option", "optionName", 90));
         table.getColumns().add(column("Qty", "quantity", 70));
         table.getColumns().add(moneyColumn("Paid", "pricePaid", 90));
-        table.getColumns().add(column("Time", "timestamp", 150));
-        table.getItems().addAll(dto.getTransactions());
+        table.getColumns().add(optionalMoneyColumn("Commission", "commissionPaid", 100));
+        table.getColumns().add(timestampColumn("Time", "timestamp", 170));
+        table.getItems().addAll(history);
         table.setPlaceholder(new Label("No trades yet."));
-        nodes.add(sectionLabel("Trade history"));
+        nodes.add(centerLabel(sectionLabel("Trade history")));
         nodes.add(table);
 
-        if (dto.getWinningOptionName() != null) {
-            nodes.add(sectionLabel("Winning option: " + dto.getWinningOptionName()));
-        }
         return nodes;
     }
 
-    private List<Node> buildOrderBookDetail(OrderBookEventDetailsDTO dto) {
+    /** The two LMSR option cards, made clickable: pick a card to trade it, then a shared quantity
+     * spinner and Buy button below act on whichever card is currently selected. Nothing is
+     * pre-selected - the spinner and button stay disabled until the user picks an option. */
+    private VBox interactiveLmsrCards(int eventId, List<OptionDTO> options, String actingUserName, Runnable onChange) {
+        List<VBox> cardNodes = new ArrayList<>();
+        int[] selectedIndex = { -1 };
+
+        Spinner<Integer> qtySpinner = new Spinner<>(1, 1_000_000, 1);
+        qtySpinner.setEditable(true);
+        qtySpinner.setPrefWidth(100);
+        qtySpinner.setDisable(true);
+
+        Button buyBtn = new Button("Buy Shares");
+        buyBtn.getStyleClass().add("primary-button");
+        buyBtn.setDisable(true);
+
+        FlowPane cardsRow = new FlowPane(12, 10);
+        cardsRow.setAlignment(Pos.CENTER);
+        for (int i = 0; i < options.size(); i++) {
+            VBox card = priceCard(options.get(i), false);
+            card.setCursor(javafx.scene.Cursor.HAND);
+            final int idx = i;
+            card.setOnMouseClicked(e -> {
+                selectedIndex[0] = idx;
+                for (int j = 0; j < cardNodes.size(); j++) {
+                    VBox c = cardNodes.get(j);
+                    c.getStyleClass().removeAll("price-card", "price-card-selected");
+                    c.getStyleClass().add(j == idx ? "price-card-selected" : "price-card");
+                }
+                qtySpinner.setDisable(false);
+                buyBtn.setDisable(false);
+            });
+            cardNodes.add(card);
+            cardsRow.getChildren().add(card);
+        }
+
+        buyBtn.setOnAction(e -> {
+            if (selectedIndex[0] < 0) {
+                showError("Choose an option first.");
+                return;
+            }
+            int quantity = qtySpinner.getValue();
+            runTradeAction(() -> engine.buyShares(actingUserName, eventId, selectedIndex[0], quantity), onChange, actingUserName);
+        });
+
+        Label qtyCaption = new Label("QUANTITY");
+        qtyCaption.getStyleClass().add("meta-label");
+        VBox controls = new VBox(8, centerLabel(qtyCaption), qtySpinner, buyBtn);
+        controls.setAlignment(Pos.CENTER);
+        controls.setPadding(new Insets(4, 0, 10, 0));
+
+        VBox box = new VBox(10, cardsRow, controls);
+        box.setAlignment(Pos.CENTER);
+        return box;
+    }
+
+    private List<Node> buildOrderBookDetail(OrderBookEventDetailsDTO dto, String viewingUserName, Runnable onChange) {
         List<Node> nodes = new ArrayList<>();
-        nodes.add(detailHeader(dto.getName(), dto.getDescription(), dto.getStatus(),
+        nodes.add(detailHeader(dto.getName(), dto.getDescription(), dto.getStatus(), dto.getMarketMakerName(),
+            readableCommission(dto.getCommissionType()) + " · " + dto.getCommission() + "%",
             "Base value (d)", money(dto.getBaseValue()),
             "Account balance", money(dto.getAccountBalance())));
+
+        if (dto.getWinningOptionName() != null) {
+            nodes.add(winnerBanner(dto.getWinningOptionName()));
+        }
 
         List<String> optionNames = new ArrayList<>();
         for (OptionBookDTO book : dto.getOptionBooks()) {
             optionNames.add(book.getOptionName());
         }
-        nodes.add(actionBar(dto.getId(), dto.getStatus(), optionNames));
+
+        boolean isMm = viewingUserName != null && viewingUserName.equals(dto.getMarketMakerName());
+        if (isMm && !"CLOSED".equals(dto.getStatus())) {
+            nodes.add(actionBar(dto.getId(), dto.getStatus(), optionNames, viewingUserName, onChange));
+        }
 
         boolean active = "ACTIVE".equals(dto.getStatus());
-        HBox books = new HBox(14);
+        FlowPane books = new FlowPane(14, 14);
+        books.setAlignment(Pos.CENTER);
         for (int i = 0; i < dto.getOptionBooks().size(); i++) {
-            books.getChildren().add(bookPanel(dto.getOptionBooks().get(i), dto.getId(), i, active));
+            boolean isWinner = dto.getOptionBooks().get(i).getOptionName().equals(dto.getWinningOptionName());
+            books.getChildren().add(bookPanel(dto.getOptionBooks().get(i), dto.getId(), i, active, isWinner, viewingUserName, dto.getBaseValue(), onChange));
         }
         nodes.add(books);
 
-        TableView<ParticipantHoldingDTO> participantsTable = new TableView<>();
-        TableColumn<ParticipantHoldingDTO, String> userCol = new TableColumn<>("Participant");
-        userCol.setCellValueFactory(new PropertyValueFactory<>("userName"));
-        userCol.setPrefWidth(140);
-        participantsTable.getColumns().add(userCol);
-        for (int i = 0; i < dto.getOptionBooks().size(); i++) {
-            final int optionIndex = i;
-            TableColumn<ParticipantHoldingDTO, String> holdingCol = new TableColumn<>(dto.getOptionBooks().get(i).getOptionName() + " held");
-            holdingCol.setCellValueFactory(row -> new javafx.beans.property.SimpleStringProperty(String.valueOf(row.getValue().getHoldingsByOption().get(optionIndex))));
-            holdingCol.setPrefWidth(110);
-            participantsTable.getColumns().add(holdingCol);
-        }
-        TableColumn<ParticipantHoldingDTO, String> valueCol = new TableColumn<>("Est. value");
-        valueCol.setCellValueFactory(row -> new javafx.beans.property.SimpleStringProperty(money(row.getValue().getEstimatedValue())));
-        valueCol.setPrefWidth(100);
-        participantsTable.getColumns().add(valueCol);
-        participantsTable.getItems().addAll(dto.getParticipants());
-        participantsTable.setPlaceholder(new Label("No participants yet."));
+        if (viewingUserName == null) {
+            // Events tab: a read-only overview of every participant's position - appropriate here, since
+            // this view is about the whole market, not any one person.
+            TableView<ParticipantHoldingDTO> participantsTable = new TableView<>();
+            participantsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
+            TableColumn<ParticipantHoldingDTO, String> userCol = new TableColumn<>("Participant");
+            userCol.setCellValueFactory(new PropertyValueFactory<>("userName"));
+            userCol.setPrefWidth(140);
+            participantsTable.getColumns().add(userCol);
+            for (int i = 0; i < dto.getOptionBooks().size(); i++) {
+                final int optionIndex = i;
+                TableColumn<ParticipantHoldingDTO, String> holdingCol = new TableColumn<>(dto.getOptionBooks().get(i).getOptionName() + " held");
+                holdingCol.setCellValueFactory(row -> new SimpleStringProperty(String.valueOf(row.getValue().getHoldingsByOption().get(optionIndex))));
+                holdingCol.setPrefWidth(110);
+                participantsTable.getColumns().add(holdingCol);
+            }
+            TableColumn<ParticipantHoldingDTO, String> valueCol = new TableColumn<>("Est. value");
+            valueCol.setCellValueFactory(row -> new SimpleStringProperty(money(row.getValue().getEstimatedValue())));
+            valueCol.setPrefWidth(100);
+            participantsTable.getColumns().add(valueCol);
+            participantsTable.getItems().addAll(dto.getParticipants());
+            participantsTable.setPlaceholder(new Label("No participants yet."));
 
-        nodes.add(sectionLabel("Participations"));
-        nodes.add(participantsTable);
+            nodes.add(centerLabel(sectionLabel("Participations")));
+            nodes.add(participantsTable);
+        } else {
+            // Users tab: this user's own position only - never expose other participants' holdings here.
+            VBox positionCard = new VBox(10);
+            positionCard.getStyleClass().add("book-panel");
+            positionCard.setPadding(new Insets(14));
+            positionCard.getChildren().add(centerLabel(sectionLabel("Your position")));
 
-        if (dto.getWinningOptionName() != null) {
-            nodes.add(sectionLabel("Winning option: " + dto.getWinningOptionName()));
+            ParticipantHoldingDTO mine = null;
+            for (ParticipantHoldingDTO p : dto.getParticipants()) {
+                if (p.getUserName().equals(viewingUserName)) {
+                    mine = p;
+                    break;
+                }
+            }
+            if (mine == null) {
+                positionCard.getChildren().add(centerLabel(placeholder("No holdings by this user yet.")));
+            } else {
+                FlowPane optionCards = new FlowPane(12, 10);
+                optionCards.setAlignment(Pos.CENTER);
+                for (int i = 0; i < dto.getOptionBooks().size(); i++) {
+                    optionCards.getChildren().add(optionPositionCard(dto.getOptionBooks().get(i).getOptionName(), mine.getHoldingsByOption().get(i), mine.getPaidByOption().get(i)));
+                }
+                positionCard.getChildren().add(optionCards);
+
+                List<Node> summaryTiles = new ArrayList<>();
+                summaryTiles.add(coloredMetaBox("Total commission paid", money(mine.getCommissionPaid()), "meta-value"));
+                if ("CLOSED".equals(dto.getStatus()) && mine.getProfitOrLoss() != null) {
+                    double pl = mine.getProfitOrLoss();
+                    boolean profit = pl >= 0;
+                    summaryTiles.add(coloredMetaBox(profit ? "Profit" : "Loss", money(Math.abs(pl)), profit ? "pl-positive" : "pl-negative"));
+                }
+                FlowPane summaryStrip = new FlowPane(10, 10, summaryTiles.toArray(new Node[0]));
+                summaryStrip.setAlignment(Pos.CENTER);
+                positionCard.getChildren().add(summaryStrip);
+            }
+            nodes.add(positionCard);
         }
+
         return nodes;
     }
 
-    private VBox bookPanel(OptionBookDTO book, int eventId, int optionIndex, boolean active) {
-        Label header = new Label(book.getOptionName());
-        header.getStyleClass().add("book-panel-title");
+    private VBox bookPanel(OptionBookDTO book, int eventId, int optionIndex, boolean active, boolean isWinner, String actingUserName, double baseValue, Runnable onChange) {
+        Label headerLabel = new Label(book.getOptionName());
+        headerLabel.getStyleClass().add("book-panel-title");
+        HBox header = isWinner ? new HBox(6, headerLabel, pill("WINNER", "pill-winner")) : new HBox(headerLabel);
+        header.setAlignment(Pos.CENTER);
 
         HBox stats = new HBox();
         stats.getStyleClass().add("stats-row");
-        stats.getChildren().addAll(
-            statBox("Last", book.getLast()), statBox("Bid", book.getBid()), statBox("Ask", book.getAsk()),
-            statBox("Mid", book.getMid()), statBox("Spread", book.getSpread())
-        );
+        for (VBox box : List.of(statBox("Last", book.getLast()), statBox("Bid", book.getBid()), statBox("Ask", book.getAsk()),
+                                 statBox("Mid", book.getMid()), statBox("Spread", book.getSpread()))) {
+            HBox.setHgrow(box, Priority.ALWAYS);
+            box.setMaxWidth(Double.MAX_VALUE);
+            stats.getChildren().add(box);
+        }
 
         TableView<OrderDTO> bids = orderTable(book.getBids());
         TableView<OrderDTO> asks = orderTable(book.getAsks());
 
-        VBox panel = new VBox(6, header, stats, sectionLabel("Bids"), bids, sectionLabel("Asks"), asks);
-        if (active) {
-            panel.getChildren().add(obTradeForm(eventId, optionIndex));
+        VBox panel = new VBox(6, header, stats, centerLabel(sectionLabel("Bids")), bids, centerLabel(sectionLabel("Asks")), asks);
+        if (active && actingUserName != null) {
+            panel.getChildren().add(obTradeForm(eventId, optionIndex, actingUserName, baseValue, onChange));
         }
-        panel.getStyleClass().add("book-panel");
+        panel.getStyleClass().add(isWinner ? "book-panel-winner" : "book-panel");
         panel.setPadding(new Insets(10));
-        HBox.setHgrow(panel, Priority.ALWAYS);
+        panel.setPrefWidth(340);
+        panel.setMinWidth(300);
         return panel;
     }
 
     private TableView<OrderDTO> orderTable(List<OrderDTO> orders) {
         TableView<OrderDTO> table = new TableView<>();
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
         table.getColumns().add(column("User", "userName", 90));
         table.getColumns().add(column("Qty", "quantity", 60));
         table.getColumns().add(moneyColumn("Price", "price", 80));
@@ -508,12 +743,40 @@ public class MainController {
         void run() throws Exception;
     }
 
-    private void runAction(ThrowingAction action, int eventId) {
+    private void runAction(ThrowingAction action, Runnable onChange) {
         try {
             action.run();
-            reloadAndShowEvent(eventId);
+            onChange.run();
         } catch (Exception e) {
             showError(e.getMessage());
+        }
+    }
+
+    /** Same as runAction, but also warns the acting user the moment a trade pushes their balance negative and blocks them. */
+    private void runTradeAction(ThrowingAction action, Runnable onChange, String actingUserName) {
+        try {
+            action.run();
+            onChange.run();
+            warnIfNowBlocked(actingUserName);
+        } catch (Exception e) {
+            showError(e.getMessage());
+        }
+    }
+
+    private void warnIfNowBlocked(String userName) {
+        try {
+            for (UserSummaryDTO u : engine.getAllUsers()) {
+                if (u.getName().equals(userName) && u.isBlocked()) {
+                    Alert alert = new Alert(Alert.AlertType.WARNING);
+                    alert.setTitle("Guess Market");
+                    alert.setHeaderText("Account blocked");
+                    alert.setContentText("'" + userName + "' now has a negative balance (" + money(u.getBalance()) + ") and is blocked from performing any further actions.");
+                    alert.showAndWait();
+                    return;
+                }
+            }
+        } catch (Exception ignored) {
+            // best-effort notification only
         }
     }
 
@@ -533,21 +796,6 @@ public class MainController {
         } catch (Exception e) {
             showError(e.getMessage());
         }
-    }
-
-    private void jumpToEvent(int eventId) {
-        mainTabPane.getSelectionModel().select(0);
-        methodFilterCombo.getSelectionModel().selectFirst();
-        statusFilterCombo.getSelectionModel().selectFirst();
-        commissionFilterCombo.getSelectionModel().selectFirst();
-        refreshEventList();
-        for (EventSummaryDTO e : eventListView.getItems()) {
-            if (e.getId() == eventId) {
-                eventListView.getSelectionModel().select(e);
-                return;
-            }
-        }
-        showEventDetailsById(eventId);
     }
 
     private void refreshUsersList() {
@@ -573,153 +821,117 @@ public class MainController {
     private void showEventDetailsById(int eventId) {
         try {
             EventDetailsDTO details = engine.getEventDetails(eventId);
+            Runnable onChange = () -> reloadAndShowEvent(eventId);
             if (details instanceof LmsrEventDetailsDTO) {
-                eventDetailPane.getChildren().setAll(buildLmsrDetail((LmsrEventDetailsDTO) details));
+                eventDetailPane.getChildren().setAll(buildLmsrDetail((LmsrEventDetailsDTO) details, null, onChange));
             } else if (details instanceof OrderBookEventDetailsDTO) {
-                eventDetailPane.getChildren().setAll(buildOrderBookDetail((OrderBookEventDetailsDTO) details));
+                eventDetailPane.getChildren().setAll(buildOrderBookDetail((OrderBookEventDetailsDTO) details, null, onChange));
             }
         } catch (Exception e) {
             showError(e.getMessage());
         }
     }
 
-    private ComboBox<String> usersCombo() {
-        ComboBox<String> combo = new ComboBox<>();
-        try {
-            for (UserSummaryDTO user : engine.getAllUsers()) {
-                combo.getItems().add(user.getName());
-            }
-        } catch (Exception ignored) {
-            // no users loaded yet - combo just stays empty
-        }
-        if (!combo.getItems().isEmpty()) {
-            combo.getSelectionModel().selectFirst();
-        }
-        return combo;
-    }
-
-    private HBox actionBar(int eventId, String status, List<String> optionNames) {
-        ComboBox<String> actingAs = usersCombo();
-        HBox bar = new HBox(8, new Label("Acting as:"), actingAs);
-        bar.setAlignment(Pos.CENTER_LEFT);
+    /** actionBar only renders when there is something for actingUserName to do - callers gate on them being the MM. */
+    private FlowPane actionBar(int eventId, String status, List<String> optionNames, String actingUserName, Runnable onChange) {
+        FlowPane bar = new FlowPane(8, 6);
+        bar.setAlignment(Pos.CENTER);
         bar.setPadding(new Insets(0, 0, 10, 0));
 
         if ("NOT_ACTIVE".equals(status)) {
             Button openBtn = new Button("Open Event");
             openBtn.getStyleClass().add("primary-button");
-            openBtn.setTooltip(new Tooltip("Only this event's Market Maker can open it."));
-            openBtn.setOnAction(e -> runAction(() -> engine.openEvent(actingAs.getValue(), eventId), eventId));
+            openBtn.setOnAction(e -> runAction(() -> engine.openEvent(actingUserName, eventId), onChange));
             bar.getChildren().add(openBtn);
         } else if ("ACTIVE".equals(status)) {
             for (int i = 0; i < optionNames.size(); i++) {
                 final int winningIndex = i;
                 Button closeBtn = new Button("Close: " + optionNames.get(i) + " wins");
-                closeBtn.setTooltip(new Tooltip("Only this event's Market Maker can close it."));
-                closeBtn.setOnAction(e -> runAction(() -> engine.closeEvent(actingAs.getValue(), eventId, winningIndex), eventId));
+                closeBtn.getStyleClass().add("close-button");
+                closeBtn.setOnAction(e -> runAction(() -> engine.closeEvent(actingUserName, eventId, winningIndex), onChange));
                 bar.getChildren().add(closeBtn);
             }
         }
         return bar;
     }
 
-    private HBox lmsrBuyForm(int eventId, List<String> optionNames) {
-        ComboBox<String> actingAs = usersCombo();
-        ComboBox<String> optionCombo = new ComboBox<>();
-        optionCombo.getItems().addAll(optionNames);
-        optionCombo.getSelectionModel().selectFirst();
-        TextField qtyField = new TextField();
-        qtyField.setPromptText("Qty");
-        qtyField.setPrefWidth(70);
-
-        Button buyBtn = new Button("Buy Shares");
-        buyBtn.getStyleClass().add("primary-button");
-        buyBtn.setOnAction(e -> {
-            int quantity = parsePositiveInt(qtyField.getText());
-            if (quantity <= 0) {
-                showError("Enter a valid positive quantity.");
-                return;
-            }
-            int optionIndex = optionCombo.getSelectionModel().getSelectedIndex();
-            runAction(() -> engine.buyShares(actingAs.getValue(), eventId, optionIndex, quantity), eventId);
-        });
-
-        HBox form = new HBox(8, new Label("Acting as:"), actingAs, optionCombo, qtyField, buyBtn);
-        form.setAlignment(Pos.CENTER_LEFT);
-        form.setPadding(new Insets(0, 0, 10, 0));
-        return form;
-    }
-
-    private HBox obTradeForm(int eventId, int optionIndex) {
-        ComboBox<String> actingAs = usersCombo();
+    private FlowPane obTradeForm(int eventId, int optionIndex, String actingUserName, double baseValue, Runnable onChange) {
         ComboBox<String> sideCombo = new ComboBox<>();
         sideCombo.getItems().addAll("Buy", "Sell");
         sideCombo.getSelectionModel().selectFirst();
-        TextField qtyField = new TextField();
-        qtyField.setPromptText("Qty");
-        qtyField.setPrefWidth(55);
-        TextField priceField = new TextField();
-        priceField.setPromptText("Price");
-        priceField.setPrefWidth(55);
+
+        Spinner<Integer> qtySpinner = new Spinner<>(1, 1_000_000, 1);
+        qtySpinner.setEditable(true);
+        qtySpinner.setPrefWidth(90);
+
+        double minPrice = 0.01;
+        double maxPrice = Math.max(minPrice, baseValue - 0.01);
+        double defaultPrice = Math.round((minPrice + maxPrice) / 2 * 100.0) / 100.0;
+        Spinner<Double> priceSpinner = new Spinner<>(minPrice, maxPrice, defaultPrice, 0.01);
+        priceSpinner.setEditable(true);
+        priceSpinner.setPrefWidth(100);
 
         Button submitBtn = new Button("Submit Order");
         submitBtn.getStyleClass().add("primary-button");
         submitBtn.setOnAction(e -> {
-            int quantity = parsePositiveInt(qtyField.getText());
-            Double price = parsePositiveDouble(priceField.getText());
-            if (quantity <= 0 || price == null || price <= 0) {
-                showError("Enter a valid quantity and price.");
-                return;
-            }
+            int quantity = qtySpinner.getValue();
+            double price = priceSpinner.getValue();
             OrderSide side = "Sell".equals(sideCombo.getValue()) ? OrderSide.SELL : OrderSide.BUY;
-            runAction(() -> engine.submitOrder(actingAs.getValue(), eventId, optionIndex, side, price, quantity), eventId);
+            runTradeAction(() -> engine.submitOrder(actingUserName, eventId, optionIndex, side, price, quantity), onChange, actingUserName);
         });
 
-        HBox form = new HBox(6, actingAs, sideCombo, qtyField, priceField, submitBtn);
+        FlowPane form = new FlowPane(6, 6, sideCombo, qtySpinner, priceSpinner, submitBtn);
         form.getStyleClass().add("tradebox");
-        form.setAlignment(Pos.CENTER_LEFT);
+        form.setAlignment(Pos.CENTER);
         form.setPadding(new Insets(8, 0, 0, 0));
         return form;
     }
 
-    private int parsePositiveInt(String text) {
-        try {
-            return Integer.parseInt(text.trim());
-        } catch (Exception e) {
-            return -1;
-        }
-    }
-
-    private Double parsePositiveDouble(String text) {
-        try {
-            return Double.parseDouble(text.trim());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     // ---------------------------------------------------------------- small builders
 
-    private VBox detailHeader(String name, String description, String status, String metaLabel1, String metaValue1, String metaLabel2, String metaValue2) {
+    private VBox detailHeader(String name, String description, String status, String marketMakerName, String commissionText, String metaLabel1, String metaValue1, String metaLabel2, String metaValue2) {
         Label nameLabel = new Label(name);
         nameLabel.getStyleClass().add("detail-title");
+
+        Label descHeading = new Label("DESCRIPTION");
+        descHeading.getStyleClass().add("meta-label");
         Label descLabel = new Label(description);
         descLabel.getStyleClass().add("detail-desc");
         descLabel.setWrapText(true);
+        VBox descBox = new VBox(4, descHeading, descLabel);
+        descBox.getStyleClass().add("description-box");
+        descBox.setPadding(new Insets(10, 14, 10, 14));
 
-        HBox meta = new HBox(20, metaBox("Status", readableStatus(status)), metaBox(metaLabel1, metaValue1), metaBox(metaLabel2, metaValue2));
-        meta.setPadding(new Insets(6, 0, 12, 0));
+        FlowPane meta = new FlowPane(10, 10, metaBox("Status", readableStatus(status)), metaBox("Market Maker", marketMakerName),
+            metaBox("Commission", commissionText), metaBox(metaLabel1, metaValue1), metaBox(metaLabel2, metaValue2));
+        meta.setAlignment(Pos.CENTER);
 
-        VBox header = new VBox(4, nameLabel, descLabel, meta);
+        VBox header = new VBox(8, centerLabel(nameLabel), descBox, meta);
         header.setPadding(new Insets(0, 0, 8, 0));
         return header;
+    }
+
+    /** A prominent, hard-to-miss banner announcing the winning option once an event is closed. */
+    private HBox winnerBanner(String winningOptionName) {
+        Label label = new Label("🏆  Winner: " + winningOptionName);
+        label.getStyleClass().add("winner-banner-label");
+        HBox banner = new HBox(label);
+        banner.setAlignment(Pos.CENTER);
+        banner.getStyleClass().add("winner-banner");
+        banner.setPadding(new Insets(10, 14, 10, 14));
+        return banner;
     }
 
     private VBox metaBox(String label, String value) {
         Label l = new Label(label.toUpperCase());
         l.getStyleClass().add("meta-label");
         Label v = new Label(value);
-        v.getStyleClass().add("meta-value");
-        return new VBox(2, l, v);
+        boolean isBalance = label.equalsIgnoreCase("Account balance");
+        v.getStyleClass().add(isBalance ? "meta-value-money" : "meta-value");
+        VBox box = new VBox(2, centerLabel(l), centerLabel(v));
+        box.setAlignment(Pos.CENTER);
+        box.getStyleClass().add("stat-tile");
+        return box;
     }
 
     private VBox statBox(String label, Double value) {
@@ -727,25 +939,71 @@ public class MainController {
         l.getStyleClass().add("stat-label");
         Label v = new Label(value == null ? "—" : money(value));
         v.getStyleClass().add("stat-value");
-        VBox box = new VBox(2, l, v);
+        VBox box = new VBox(2, centerLabel(l), centerLabel(v));
         box.setAlignment(Pos.CENTER);
         box.getStyleClass().add("stat-box");
-        HBox.setHgrow(box, Priority.ALWAYS);
-        box.setMaxWidth(Double.MAX_VALUE);
         return box;
     }
 
-    private VBox priceCard(OptionDTO option) {
-        Label name = new Label(option.getName());
+    private VBox priceCard(OptionDTO option, boolean isWinner) {
+        HBox nameRow = isWinner
+            ? new HBox(6, new Label(option.getName()), pill("WINNER", "pill-winner"))
+            : new HBox(new Label(option.getName()));
+        nameRow.setAlignment(Pos.CENTER);
         Label price = new Label(money(option.getCurrentProbability()));
         price.getStyleClass().add("price-card-value");
         Label chance = new Label(Math.round(option.getCurrentProbability() * 100) + "% implied chance");
         chance.getStyleClass().add("price-card-chance");
-        VBox card = new VBox(3, name, price, chance);
+        Label shares = new Label(option.getSharesBought() + " shares bought");
+        shares.getStyleClass().add("price-card-shares");
+        VBox card = new VBox(5, nameRow, centerLabel(price), centerLabel(chance), centerLabel(shares));
+        card.setAlignment(Pos.CENTER);
+        card.getStyleClass().add(isWinner ? "price-card-winner" : "price-card");
+        card.setPadding(new Insets(16, 22, 16, 22));
+        card.setPrefWidth(190);
+        return card;
+    }
+
+    /** One option's slice of a user's Order Book position: shares held and the gross amount paid buying into it. */
+    private VBox optionPositionCard(String optionName, int sharesHeld, double amountPaid) {
+        Label name = new Label(optionName);
+        Label shares = new Label(sharesHeld + " shares held");
+        shares.getStyleClass().add("position-card-shares");
+        shares.setWrapText(true);
+        shares.setTextAlignment(TextAlignment.CENTER);
+        Label paid = new Label("Paid: " + money(amountPaid));
+        paid.getStyleClass().add("position-card-paid");
+        VBox card = new VBox(4, centerLabel(name), centerLabel(shares), centerLabel(paid));
+        card.setAlignment(Pos.CENTER);
         card.getStyleClass().add("price-card");
         card.setPadding(new Insets(10, 14, 10, 14));
-        HBox.setHgrow(card, Priority.ALWAYS);
+        card.setPrefWidth(210);
         return card;
+    }
+
+    /** Like metaBox, but lets the caller pick the value's style class (e.g. to color it green for a profit, red for a loss). */
+    private VBox coloredMetaBox(String label, String value, String valueStyleClass) {
+        Label l = new Label(label.toUpperCase());
+        l.getStyleClass().add("meta-label");
+        Label v = new Label(value);
+        v.getStyleClass().add(valueStyleClass);
+        VBox box = new VBox(2, centerLabel(l), centerLabel(v));
+        box.setAlignment(Pos.CENTER);
+        box.getStyleClass().add("stat-tile");
+        return box;
+    }
+
+    /** A small standalone stat card - a caption above a bold value, with its own visible border, so it
+     * reads as a compact fact card rather than a pill/tag or a strip-glued tile. */
+    private VBox statTile(String label, String value, String valueStyleClass) {
+        Label l = new Label(label.toUpperCase());
+        l.getStyleClass().add("meta-label");
+        Label v = new Label(value);
+        v.getStyleClass().add(valueStyleClass);
+        VBox box = new VBox(2, centerLabel(l), centerLabel(v));
+        box.setAlignment(Pos.CENTER);
+        box.getStyleClass().add("stat-tile");
+        return box;
     }
 
     private Label sectionLabel(String text) {
@@ -757,6 +1015,13 @@ public class MainController {
     private Label placeholder(String text) {
         Label label = new Label(text);
         label.getStyleClass().add("placeholder-label");
+        return label;
+    }
+
+    /** Centers a label's text within whatever width it ends up stretched to by its parent. */
+    private Label centerLabel(Label label) {
+        label.setAlignment(Pos.CENTER);
+        label.setMaxWidth(Double.MAX_VALUE);
         return label;
     }
 
@@ -778,9 +1043,39 @@ public class MainController {
         col.setCellValueFactory(row -> {
             try {
                 Object raw = row.getValue().getClass().getMethod("get" + Character.toUpperCase(property.charAt(0)) + property.substring(1)).invoke(row.getValue());
-                return new javafx.beans.property.SimpleStringProperty(money(((Number) raw).doubleValue()));
+                return new SimpleStringProperty(money(((Number) raw).doubleValue()));
             } catch (Exception e) {
-                return new javafx.beans.property.SimpleStringProperty("");
+                return new SimpleStringProperty("");
+            }
+        });
+        col.setPrefWidth(width);
+        return col;
+    }
+
+    /** Like moneyColumn, but shows an em dash instead of $0.00 - for values that are usually zero (e.g. no commission charged). */
+    private <S> TableColumn<S, String> optionalMoneyColumn(String title, String property, double width) {
+        TableColumn<S, String> col = new TableColumn<>(title);
+        col.setCellValueFactory(row -> {
+            try {
+                Object raw = row.getValue().getClass().getMethod("get" + Character.toUpperCase(property.charAt(0)) + property.substring(1)).invoke(row.getValue());
+                double value = ((Number) raw).doubleValue();
+                return new SimpleStringProperty(value > 0 ? money(value) : "—");
+            } catch (Exception e) {
+                return new SimpleStringProperty("");
+            }
+        });
+        col.setPrefWidth(width);
+        return col;
+    }
+
+    private <S> TableColumn<S, String> timestampColumn(String title, String property, double width) {
+        TableColumn<S, String> col = new TableColumn<>(title);
+        col.setCellValueFactory(row -> {
+            try {
+                Object raw = row.getValue().getClass().getMethod("get" + Character.toUpperCase(property.charAt(0)) + property.substring(1)).invoke(row.getValue());
+                return new SimpleStringProperty(((LocalDateTime) raw).format(TIMESTAMP_FORMAT));
+            } catch (Exception e) {
+                return new SimpleStringProperty("");
             }
         });
         col.setPrefWidth(width);
@@ -788,7 +1083,9 @@ public class MainController {
     }
 
     private String money(double value) {
-        return String.format("$%.2f", value);
+        // Locale.ENGLISH pinned for the same reason as TIMESTAMP_FORMAT above: without it, a machine
+        // whose default locale uses a comma decimal separator would silently render "$12,50".
+        return String.format(java.util.Locale.ENGLISH, "$%.2f", value);
     }
 
     private String readableType(String type) {

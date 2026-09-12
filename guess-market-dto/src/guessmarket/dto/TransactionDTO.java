@@ -2,20 +2,22 @@ package guessmarket.dto;
 
 import java.time.LocalDateTime;
 
-public class TransactionDTO 
+public class TransactionDTO
 {
     private final String userName;
     private final String optionName;
     private final int quantity;
     private final double pricePaid;
+    private final double commissionPaid;
     private final LocalDateTime timestamp;
 
-    public TransactionDTO(final String userName, final String optionName, final int quantity, final double pricePaid, final LocalDateTime timestamp)
+    public TransactionDTO(final String userName, final String optionName, final int quantity, final double pricePaid, final double commissionPaid, final LocalDateTime timestamp)
     {
         this.userName = userName;
         this.optionName = optionName;
         this.quantity = quantity;
         this.pricePaid = pricePaid;
+        this.commissionPaid = commissionPaid;
         this.timestamp = timestamp;
     }
 
@@ -37,6 +39,11 @@ public class TransactionDTO
     public double getPricePaid()
     {
         return pricePaid;
+    }
+
+    public double getCommissionPaid()
+    {
+        return commissionPaid;
     }
 
     public LocalDateTime getTimestamp()

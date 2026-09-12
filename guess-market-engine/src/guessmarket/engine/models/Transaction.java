@@ -10,14 +10,16 @@ public class Transaction implements Serializable
     private final String optionName;
     private final int quantity;
     private final double pricePaid;
+    private final double commissionPaid;
     private final LocalDateTime timestamp;
 
-    public Transaction(String userName, String optionName, int quantity, double pricePaid)
+    public Transaction(String userName, String optionName, int quantity, double pricePaid, double commissionPaid)
     {
         this.userName = userName;
         this.optionName = optionName;
         this.quantity = quantity;
         this.pricePaid = pricePaid;
+        this.commissionPaid = commissionPaid;
         this.timestamp = LocalDateTime.now();
     }
 
@@ -39,6 +41,11 @@ public class Transaction implements Serializable
     public double getPricePaid()
     {
         return pricePaid;
+    }
+
+    public double getCommissionPaid()
+    {
+        return commissionPaid;
     }
 
     public LocalDateTime getTimestamp()

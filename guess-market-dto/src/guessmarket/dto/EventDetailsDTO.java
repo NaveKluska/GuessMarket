@@ -25,4 +25,6 @@ public interface EventDetailsDTO
     double getAccountBalance();
 
     String getWinningOptionName();
+
+    String getMarketMakerName();
 }

@@ -5,6 +5,7 @@ import guessmarket.dto.OptionDTO;
 import guessmarket.dto.TransactionDTO;
 
 import java.util.List;
+import java.util.Map;
 
 public class LmsrEventDetailsDTO implements EventDetailsDTO
 {
@@ -19,8 +20,10 @@ public class LmsrEventDetailsDTO implements EventDetailsDTO
     private final List<OptionDTO> options;
     private final List<TransactionDTO> transactions;
     private final String winningOptionName;
+    private final Map<String, Double> commissionPaidByUser;
+    private final String marketMakerName;
 
-    public LmsrEventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final String status, final double accountBalance, final double totalCommissionCollected, final List<OptionDTO> options, final List<TransactionDTO> transactions, final String winningOptionName)
+    public LmsrEventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final String status, final double accountBalance, final double totalCommissionCollected, final List<OptionDTO> options, final List<TransactionDTO> transactions, final String winningOptionName, final Map<String, Double> commissionPaidByUser, final String marketMakerName)
     {
         this.id = id;
         this.name = name;
@@ -33,6 +36,14 @@ public class LmsrEventDetailsDTO implements EventDetailsDTO
         this.options = options;
         this.transactions = transactions;
         this.winningOptionName = winningOptionName;
+        this.commissionPaidByUser = commissionPaidByUser;
+        this.marketMakerName = marketMakerName;
+    }
+
+    @Override
+    public String getMarketMakerName()
+    {
+        return marketMakerName;
     }
 
     @Override
@@ -102,5 +113,11 @@ public class LmsrEventDetailsDTO implements EventDetailsDTO
     public List<TransactionDTO> getTransactions()
     {
         return transactions;
+    }
+
+    /** Total commission a given user has paid on this event so far (0 if none). */
+    public double getCommissionPaidBy(final String userName)
+    {
+        return commissionPaidByUser.getOrDefault(userName, 0.0);
     }
 }

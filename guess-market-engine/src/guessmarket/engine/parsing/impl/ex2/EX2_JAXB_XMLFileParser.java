@@ -18,6 +18,7 @@ import guessmarket.engine.parsing.jaxb.generated.ex2.GuessMarket;
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
 import jakarta.xml.bind.Unmarshaller;
+import org.xml.sax.SAXParseException;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -63,7 +64,7 @@ public class EX2_JAXB_XMLFileParser implements FileParser {
             Unmarshaller unmarshaller = jaxbContext.createUnmarshaller();
             guessMarket = (GuessMarket) unmarshaller.unmarshal(xmlFile);
         } catch (JAXBException e) {
-            throw new Exception("Error parsing XML file with JAXB: " + e.getMessage(), e);
+            throw new IllegalArgumentException("Error: The XML file is not well-formed (" + describeXmlSyntaxError(e) + ").", e);
         }
 
         List<User> users = parseUsers(guessMarket.getGMUsers());
@@ -72,6 +73,22 @@ public class EX2_JAXB_XMLFileParser implements FileParser {
         validateMarketMakers(users, events);
 
         return new ParsedMarketData(events, users);
+    }
+
+    /** Pulls a human-readable reason out of a JAXBException, which almost never has its own message - the real reason sits in its linked cause. */
+    private String describeXmlSyntaxError(JAXBException e) {
+        Throwable cause = e.getLinkedException() != null ? e.getLinkedException() : e.getCause();
+        if (cause instanceof SAXParseException) {
+            SAXParseException sax = (SAXParseException) cause;
+            return sax.getMessage() + " [line " + sax.getLineNumber() + ", column " + sax.getColumnNumber() + "]";
+        }
+        if (cause != null && cause.getMessage() != null && !cause.getMessage().isBlank()) {
+            return cause.getMessage();
+        }
+        if (e.getMessage() != null && !e.getMessage().isBlank()) {
+            return e.getMessage();
+        }
+        return "the file does not contain valid XML";
     }
 
     private List<User> parseUsers(GMUsers gmUsers) {

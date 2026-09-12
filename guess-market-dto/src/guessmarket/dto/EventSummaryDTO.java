@@ -13,8 +13,9 @@ public class EventSummaryDTO
     private final String status;
     private final String type;
     private final String marketMakerName;
+    private final double accountBalance;
 
-    public EventSummaryDTO(final int id, final String name, final String description, final int commission, final String commissionType, final List<String> options, final String status, final String type, final String marketMakerName)
+    public EventSummaryDTO(final int id, final String name, final String description, final int commission, final String commissionType, final List<String> options, final String status, final String type, final String marketMakerName, final double accountBalance)
     {
         this.id = id;
         this.name = name;
@@ -25,6 +26,12 @@ public class EventSummaryDTO
         this.status = status;
         this.type = type;
         this.marketMakerName = marketMakerName;
+        this.accountBalance = accountBalance;
+    }
+
+    public double getAccountBalance()
+    {
+        return accountBalance;
     }
 
     public String getMarketMakerName()

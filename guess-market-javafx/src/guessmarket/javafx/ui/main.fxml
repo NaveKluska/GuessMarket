@@ -12,25 +12,28 @@
 <?import javafx.scene.control.TabPane?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
-<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
 <BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="guessmarket.javafx.ui.MainController" styleClass="app-root">
 
     <top>
-        <HBox styleClass="toolbar" spacing="10" alignment="CENTER_LEFT">
-            <padding><Insets top="10" right="16" bottom="10" left="16"/></padding>
-            <Label text="Guess Market" styleClass="brand-title"/>
-            <Region HBox.hgrow="ALWAYS"/>
-            <Label fx:id="filePathLabel" text="No file loaded" styleClass="filepath-label"/>
-            <ProgressBar fx:id="loadProgressBar" progress="0" visible="false" managed="false"/>
-            <Button fx:id="loadFileButton" text="Load File..." styleClass="primary-button"/>
-        </HBox>
+        <VBox styleClass="toolbar">
+            <HBox alignment="CENTER">
+                <padding><Insets top="8" right="16" bottom="2" left="16"/></padding>
+                <Label text="Guess Market" styleClass="brand-title"/>
+            </HBox>
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <padding><Insets top="4" right="16" bottom="10" left="16"/></padding>
+                <Button fx:id="loadFileButton" text="Load File..." styleClass="primary-button"/>
+                <Label fx:id="filePathLabel" text="No file loaded" styleClass="filepath-label" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                <ProgressBar fx:id="loadProgressBar" progress="0" visible="false" managed="false"/>
+            </HBox>
+        </VBox>
     </top>
 
     <center>
-        <TabPane fx:id="mainTabPane" tabClosingPolicy="UNAVAILABLE" styleClass="main-tabs">
+        <TabPane tabClosingPolicy="UNAVAILABLE" styleClass="main-tabs">
 
             <Tab text="Events">
                 <VBox>
@@ -51,8 +54,8 @@
                     </HBox>
 
                     <SplitPane dividerPositions="0.32" VBox.vgrow="ALWAYS">
-                        <ListView fx:id="eventListView" />
-                        <ScrollPane fitToWidth="true" styleClass="detail-scroll">
+                        <ListView fx:id="eventListView" styleClass="main-list" minWidth="160" />
+                        <ScrollPane fitToWidth="true" styleClass="detail-scroll" minWidth="440">
                             <VBox fx:id="eventDetailPane" styleClass="detail-pane">
                                 <Label text="Select an event to see its details." styleClass="placeholder-label"/>
                             </VBox>
@@ -63,8 +66,8 @@
 
             <Tab text="Users">
                 <SplitPane dividerPositions="0.28">
-                    <ListView fx:id="userListView" />
-                    <ScrollPane fitToWidth="true" styleClass="detail-scroll">
+                    <ListView fx:id="userListView" styleClass="main-list" minWidth="160" />
+                    <ScrollPane fitToWidth="true" styleClass="detail-scroll" minWidth="440">
                         <VBox fx:id="userDetailPane" styleClass="detail-pane">
                             <Label text="Select a user to see their details." styleClass="placeholder-label"/>
                         </VBox>

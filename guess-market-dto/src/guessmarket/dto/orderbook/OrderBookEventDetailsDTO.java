@@ -18,8 +18,9 @@ public class OrderBookEventDetailsDTO implements EventDetailsDTO
     private final List<OptionBookDTO> optionBooks;
     private final List<ParticipantHoldingDTO> participants;
     private final String winningOptionName;
+    private final String marketMakerName;
 
-    public OrderBookEventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final String status, final double accountBalance, final int baseValue, final boolean allowMint, final List<OptionBookDTO> optionBooks, final List<ParticipantHoldingDTO> participants, final String winningOptionName)
+    public OrderBookEventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final String status, final double accountBalance, final int baseValue, final boolean allowMint, final List<OptionBookDTO> optionBooks, final List<ParticipantHoldingDTO> participants, final String winningOptionName, final String marketMakerName)
     {
         this.id = id;
         this.name = name;
@@ -33,6 +34,13 @@ public class OrderBookEventDetailsDTO implements EventDetailsDTO
         this.optionBooks = optionBooks;
         this.participants = participants;
         this.winningOptionName = winningOptionName;
+        this.marketMakerName = marketMakerName;
+    }
+
+    @Override
+    public String getMarketMakerName()
+    {
+        return marketMakerName;
     }
 
     @Override

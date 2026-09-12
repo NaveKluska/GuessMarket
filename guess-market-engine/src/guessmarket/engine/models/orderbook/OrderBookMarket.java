@@ -1,5 +1,7 @@
 package guessmarket.engine.models.orderbook;
 
+import guessmarket.engine.util.Amounts;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,7 +40,7 @@ public class OrderBookMarket
         final double maxPrice = d - 0.01;
         final double epsilon = 1e-9;
         if (price < minPrice - epsilon || price > maxPrice + epsilon) {
-            throw new IllegalArgumentException("Order price must be between " + minPrice + " and " + maxPrice + " (got " + price + ").");
+            throw new IllegalArgumentException("Order price must be between " + Amounts.format(minPrice) + " and " + Amounts.format(maxPrice) + " (got " + Amounts.format(price) + ").");
         }
 
         final OrderBook book = booksByOptionIndex[optionIndex];
