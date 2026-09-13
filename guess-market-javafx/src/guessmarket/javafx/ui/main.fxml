@@ -54,7 +54,7 @@
                     </HBox>
 
                     <SplitPane dividerPositions="0.32" VBox.vgrow="ALWAYS">
-                        <ListView fx:id="eventListView" styleClass="main-list" minWidth="160" />
+                        <ListView fx:id="eventListView" styleClass="main-list" minWidth="210" />
                         <ScrollPane fitToWidth="true" styleClass="detail-scroll" minWidth="440">
                             <VBox fx:id="eventDetailPane" styleClass="detail-pane">
                                 <Label text="Select an event to see its details." styleClass="placeholder-label"/>
@@ -66,7 +66,7 @@
 
             <Tab text="Users">
                 <SplitPane dividerPositions="0.28">
-                    <ListView fx:id="userListView" styleClass="main-list" minWidth="160" />
+                    <ListView fx:id="userListView" styleClass="main-list" minWidth="210" />
                     <ScrollPane fitToWidth="true" styleClass="detail-scroll" minWidth="440">
                         <VBox fx:id="userDetailPane" styleClass="detail-pane">
                             <Label text="Select a user to see their details." styleClass="placeholder-label"/>

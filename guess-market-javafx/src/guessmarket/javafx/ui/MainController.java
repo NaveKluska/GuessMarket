@@ -160,9 +160,17 @@ public class MainController {
             allEvents.clear();
             allEvents.addAll(loadTask.getValue());
             refreshEventList();
-            eventDetailPane.getChildren().setAll(placeholder("Select an event to see its details."));
+            // refreshEventList()/refreshUsersList() already select (and render) the first row when
+            // one exists, so only fall back to the placeholder text for the genuinely empty case -
+            // otherwise this would unconditionally overwrite the detail pane right after it was
+            // just populated by that selection.
+            if (eventListView.getSelectionModel().isEmpty()) {
+                eventDetailPane.getChildren().setAll(placeholder("Select an event to see its details."));
+            }
             refreshUsersList();
-            userDetailPane.getChildren().setAll(placeholder("Select a user to see their details."));
+            if (userListView.getSelectionModel().isEmpty()) {
+                userDetailPane.getChildren().setAll(placeholder("Select a user to see their details."));
+            }
         });
 
         loadTask.setOnFailed(event -> {
@@ -201,6 +209,11 @@ public class MainController {
         }
         if (previouslySelected != null && eventListView.getItems().contains(previouslySelected)) {
             eventListView.getSelectionModel().select(previouslySelected);
+        } else if (!eventListView.getItems().isEmpty()) {
+            // Same reasoning as refreshUsersList(): without an explicit selection, row 0 can look
+            // selected before any real SelectionModel change has happened, so a click on it is a
+            // no-op. Select it for real so the visible state and the detail pane agree.
+            eventListView.getSelectionModel().selectFirst();
         }
     }
 
@@ -242,6 +255,13 @@ public class MainController {
 
             VBox box = new VBox(4, name, pills, metaPills);
             box.setPadding(new Insets(4, 2, 4, 2));
+            // Without this, the box takes its natural (unwrapped) preferred width, which can exceed
+            // whatever room the SplitPane divider leaves it - so the ListView grows a horizontal
+            // scrollbar and clips the pills/name instead of wrapping them. Binding the box's max
+            // width to the ListView's own width forces it to shrink instead, so the name ellipsizes
+            // and the pills wrap onto more lines - nothing is ever hidden, no matter where the
+            // divider sits.
+            box.maxWidthProperty().bind(getListView().widthProperty().subtract(24));
             setGraphic(box);
         }
     }
@@ -264,6 +284,8 @@ public class MainController {
 
             VBox box = new VBox(4, name, pills);
             box.setPadding(new Insets(4, 2, 4, 2));
+            // Same reasoning as EventCell: force wrapping instead of a horizontal scrollbar clipping content.
+            box.maxWidthProperty().bind(getListView().widthProperty().subtract(24));
             setGraphic(box);
         }
     }
@@ -537,7 +559,9 @@ public class MainController {
         table.getColumns().add(timestampColumn("Time", "timestamp", 170));
         table.getItems().addAll(history);
         table.setPlaceholder(new Label("No trades yet."));
-        nodes.add(centerLabel(sectionLabel("Trade history")));
+        // On the Events tab this shows every user's trades (hence the "User" column above); on the
+        // Users tab it's already filtered down to just the viewer, so the title should say so.
+        nodes.add(centerLabel(sectionLabel(viewingUserName != null ? "Your trade history" : "Trade history")));
         nodes.add(table);
 
         return nodes;
@@ -558,6 +582,11 @@ public class MainController {
         Button buyBtn = new Button("Buy Shares");
         buyBtn.getStyleClass().add("primary-button");
         buyBtn.setDisable(true);
+
+        Label pickHint = new Label("Click an option below to trade it ↓");
+        pickHint.getStyleClass().add("hint-chip");
+        HBox pickHintWrap = new HBox(pickHint);
+        pickHintWrap.setAlignment(Pos.CENTER);
 
         FlowPane cardsRow = new FlowPane(12, 10);
         cardsRow.setAlignment(Pos.CENTER);
@@ -594,7 +623,7 @@ public class MainController {
         controls.setAlignment(Pos.CENTER);
         controls.setPadding(new Insets(4, 0, 10, 0));
 
-        VBox box = new VBox(10, cardsRow, controls);
+        VBox box = new VBox(10, pickHintWrap, cardsRow, controls);
         box.setAlignment(Pos.CENTER);
         return box;
     }
@@ -679,7 +708,9 @@ public class MainController {
                 positionCard.getChildren().add(optionCards);
 
                 List<Node> summaryTiles = new ArrayList<>();
-                summaryTiles.add(coloredMetaBox("Total commission paid", money(mine.getCommissionPaid()), "meta-value"));
+                // Same sleek, non-obvious phrasing as the LMSR detail's per-viewer commission tile -
+                // this box only ever renders for the one user looking at their own position.
+                summaryTiles.add(coloredMetaBox("Your commission", money(mine.getCommissionPaid()), "meta-value"));
                 if ("CLOSED".equals(dto.getStatus()) && mine.getProfitOrLoss() != null) {
                     double pl = mine.getProfitOrLoss();
                     boolean profit = pl >= 0;
@@ -808,13 +839,22 @@ public class MainController {
             // no users loaded yet
         }
         userListView.getItems().setAll(allUsers);
+        boolean restored = false;
         if (previousName != null) {
             for (UserSummaryDTO u : userListView.getItems()) {
                 if (u.getName().equals(previousName)) {
                     userListView.getSelectionModel().select(u);
+                    restored = true;
                     break;
                 }
             }
+        }
+        // Nothing to restore (first load, or the selected user is gone): select the first row
+        // explicitly. Otherwise the ListView's default focus model paints row 0 as if it were
+        // selected without the SelectionModel actually holding it, so a click on that same row
+        // is a no-op (no change event) and the detail pane never populates.
+        if (!restored && !userListView.getItems().isEmpty()) {
+            userListView.getSelectionModel().selectFirst();
         }
     }
 
@@ -880,11 +920,21 @@ public class MainController {
             runTradeAction(() -> engine.submitOrder(actingUserName, eventId, optionIndex, side, price, quantity), onChange, actingUserName);
         });
 
-        FlowPane form = new FlowPane(6, 6, sideCombo, qtySpinner, priceSpinner, submitBtn);
+        FlowPane form = new FlowPane(6, 6, sideCombo, labeledField("QTY", qtySpinner), labeledField("PRICE", priceSpinner), submitBtn);
         form.getStyleClass().add("tradebox");
         form.setAlignment(Pos.CENTER);
         form.setPadding(new Insets(8, 0, 0, 0));
         return form;
+    }
+
+    /** A small uppercase caption stacked above a control - used so a bare Spinner isn't left
+     * unlabeled about what quantity it means (order side, in this case; see obTradeForm). */
+    private VBox labeledField(String caption, Node control) {
+        Label label = new Label(caption);
+        label.getStyleClass().add("meta-label");
+        VBox box = new VBox(2, centerLabel(label), control);
+        box.setAlignment(Pos.CENTER);
+        return box;
     }
 
     // ---------------------------------------------------------------- small builders
@@ -1083,6 +1133,13 @@ public class MainController {
     }
 
     private String money(double value) {
+        // Collapse amounts too small to show so floating-point dust cannot render as "$-0.00":
+        // a closed event's account can land on -0.0 or ~-1e-15, and "%.2f" prints the sign even
+        // when the digits are all zero. 0.005 is exactly the point below which "%.2f" would round
+        // to zero anyway, so no amount that has anything to display is affected.
+        if (Math.abs(value) < 0.005) {
+            value = 0.0;
+        }
         // Locale.ENGLISH pinned for the same reason as TIMESTAMP_FORMAT above: without it, a machine
         // whose default locale uses a comma decimal separator would silently render "$12,50".
         return String.format(java.util.Locale.ENGLISH, "$%.2f", value);

@@ -359,6 +359,11 @@ public class MarketEngineImpl implements MarketEngine
             final User mm = users.get(eventMarketMakers.get(obEvent.getId()));
             if (mm != null) {
                 mm.increaseBalance(commission);
+                // The ledger behind getProfitOrLoss() already counts every cent the Market Maker
+                // SPENDS on this event, so it has to count what the event pays them too. Without
+                // this, an MM whose balance never moved (for instance one who only traded with
+                // themselves) is reported as having lost exactly the commission they earned.
+                obEvent.recordReceived(mm.getName(), commission);
             }
         }
     }
@@ -450,9 +455,18 @@ public class MarketEngineImpl implements MarketEngine
         }
 
         final double leftover = event.getAccountBalance();
-        if (leftover > 0.01) {
+        // Sweep whatever is actually left, not just amounts over a penny: the spec says funds
+        // remaining in the event account return to the Market Maker, and the old 0.01 threshold
+        // stranded up to a cent inside a closed event (visible as "$0.01" on an event with a small
+        // b). Still strictly positive so a floating-point negative is never passed to decrease().
+        if (leftover > 0) {
             event.decreaseAccountBalance(leftover);
             mm.increaseBalance(leftover);
+            if (event instanceof OrderBookEvent) {
+                // Likewise: whatever is swept back out of the event account is money returned to
+                // the Market Maker, and the profit/loss ledger has to account for it.
+                ((OrderBookEvent) event).recordReceived(mm.getName(), leftover);
+            }
         }
     }
 
@@ -480,6 +494,11 @@ public class MarketEngineImpl implements MarketEngine
             event.collectCommission(closeCommission);
             event.recordCommissionPaid(winnerName, closeCommission);
             mm.increaseBalance(closeCommission);
+            if (event instanceof OrderBookEvent) {
+                // Same reasoning as creditCommissionToMm: close-time commission is money the event
+                // pays the Market Maker, so the profit/loss ledger has to see it.
+                ((OrderBookEvent) event).recordReceived(mm.getName(), closeCommission);
+            }
         }
 
         final User winner = users.get(winnerName);
