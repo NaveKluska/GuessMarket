@@ -487,3 +487,72 @@
     -fx-border-radius: 10;
     -fx-background-radius: 10;
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Bonus: the price and balance charts.
+   Written entirely in terms of the colour tokens above, so a skin restyles the charts for free
+   rather than needing chart rules of its own.
+   --------------------------------------------------------------------------------------------- */
+.gm-chart {
+    -fx-background-color: transparent;
+    -fx-padding: 4 8 4 4;
+}
+
+.gm-chart .chart-plot-background {
+    -fx-background-color: -gm-bg-soft;
+}
+
+.gm-chart .chart-vertical-grid-lines,
+.gm-chart .chart-horizontal-grid-lines {
+    -fx-stroke: -gm-border;
+}
+
+.gm-chart .chart-vertical-zero-line,
+.gm-chart .chart-horizontal-zero-line {
+    -fx-stroke: -gm-border-strong;
+}
+
+.gm-chart .axis {
+    -fx-tick-label-fill: -gm-text-muted;
+    -fx-font-size: 10px;
+}
+
+.gm-chart .axis-label {
+    -fx-text-fill: -gm-text-faint;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.gm-chart .axis .axis-tick-mark,
+.gm-chart .axis .axis-minor-tick-mark {
+    -fx-stroke: -gm-border-strong;
+}
+
+.gm-chart .chart-legend {
+    -fx-background-color: transparent;
+    -fx-padding: 2 0 0 0;
+}
+
+.gm-chart .chart-legend-item {
+    -fx-text-fill: -gm-text-muted;
+    -fx-font-size: 11px;
+}
+
+/* Two series is the norm here (an event always has exactly two options), so the first two colours
+   are the ones that matter - picked for contrast in every skin. */
+.gm-chart .default-color0.chart-series-line { -fx-stroke: -gm-accent; -fx-stroke-width: 2px; }
+.gm-chart .default-color1.chart-series-line { -fx-stroke: -gm-book; -fx-stroke-width: 2px; }
+
+.gm-chart .default-color0.chart-line-symbol,
+.gm-chart .default-color0.chart-legend-item-symbol {
+    -fx-background-color: -gm-accent, -gm-surface;
+    -fx-background-insets: 0, 2;
+    -fx-padding: 3px;
+}
+
+.gm-chart .default-color1.chart-line-symbol,
+.gm-chart .default-color1.chart-legend-item-symbol {
+    -fx-background-color: -gm-book, -gm-surface;
+    -fx-background-insets: 0, 2;
+    -fx-padding: 3px;
+}

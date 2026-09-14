@@ -400,6 +400,11 @@ public class MainController {
         createRow.setPadding(new Insets(2, 0, 0, 0));
         nodes.add(createRow);
 
+        // Bonus: how this user's account balance has moved over time.
+        SectionCard balanceSection = sectionCard("Account balance over time");
+        balanceSection.body().getChildren().add(balanceChart(user.getBalanceHistory()));
+        nodes.add(balanceSection.outer());
+
         SectionCard participationSection = sectionCard("Events participation / owner");
         nodes.add(participationSection.outer());
 
@@ -584,6 +589,8 @@ public class MainController {
     // for against time specifically, so that one is plotted against elapsed seconds.
 
     private static final int CHART_HEIGHT = 260;
+    /** Clock labels on the balance chart's time axis. English pinned, as everywhere else. */
+    private static final DateTimeFormatter CLOCK_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss", java.util.Locale.ENGLISH);
 
     /** An empty line chart set up the way both of the charts below want it. */
     private LineChart<Number, Number> emptyChart(String xLabel, String yLabel) {
@@ -616,11 +623,13 @@ public class MainController {
         }
 
         LineChart<Number, Number> chart = emptyChart("Trade number", yLabel);
+        int longest = 0;
         for (int i = 0; i < histories.size(); i++) {
             List<ChartPointDTO> points = histories.get(i);
             if (points == null || points.isEmpty()) {
                 continue;
             }
+            longest = Math.max(longest, points.size() - 1);
             XYChart.Series<Number, Number> series = new XYChart.Series<>();
             series.setName(optionNames.get(i));
             for (int p = 0; p < points.size(); p++) {
@@ -628,6 +637,25 @@ public class MainController {
             }
             chart.getData().add(series);
         }
+
+        // Trades are whole things, so the axis must step in whole numbers. Left to range itself the
+        // axis happily labels "0.5" and "1.5", which is meaningless for a count of trades.
+        NumberAxis xAxis = (NumberAxis) chart.getXAxis();
+        xAxis.setAutoRanging(false);
+        xAxis.setLowerBound(0);
+        xAxis.setUpperBound(Math.max(1, longest));
+        xAxis.setTickUnit(Math.max(1, Math.ceil(Math.max(1, longest) / 10.0)));
+        xAxis.setTickLabelFormatter(new javafx.util.StringConverter<Number>() {
+            @Override
+            public String toString(Number value) {
+                return String.valueOf(value.intValue());
+            }
+
+            @Override
+            public Number fromString(String s) {
+                return Integer.valueOf(s);
+            }
+        });
         return chart;
     }
 
@@ -636,15 +664,41 @@ public class MainController {
         if (history == null || history.size() < 2) {
             return centerLabel(placeholder("No account activity yet - the balance chart appears after the first action."));
         }
-        LineChart<Number, Number> chart = emptyChart("Seconds elapsed", "Balance ($)");
+        LineChart<Number, Number> chart = emptyChart("Time", "Balance ($)");
         XYChart.Series<Number, Number> series = new XYChart.Series<>();
         series.setName("Account balance");
-        LocalDateTime start = history.get(0).getAt();
+        final LocalDateTime start = history.get(0).getAt();
+        double span = 0;
         for (ChartPointDTO point : history) {
             double seconds = java.time.Duration.between(start, point.getAt()).toMillis() / 1000.0;
+            span = Math.max(span, seconds);
             series.getData().add(new XYChart.Data<>(seconds, point.getValue()));
         }
         chart.getData().add(series);
+
+        // The x values are seconds since the first record, but they are LABELLED as clock times -
+        // the brief asks for the balance against time, and a reader wants to see when something
+        // happened rather than an offset. The axis spans exactly the activity: padding it out to
+        // some minimum instead squashes the whole line against the left edge whenever a burst of
+        // trades lands close together, and the shape of the line matters more than having every
+        // tick show a different second.
+        double axisMax = span > 0 ? span : 1.0;
+        NumberAxis xAxis = (NumberAxis) chart.getXAxis();
+        xAxis.setAutoRanging(false);
+        xAxis.setLowerBound(0);
+        xAxis.setUpperBound(axisMax);
+        xAxis.setTickUnit(axisMax / 5.0);
+        xAxis.setTickLabelFormatter(new javafx.util.StringConverter<Number>() {
+            @Override
+            public String toString(Number value) {
+                return start.plusNanos((long) (value.doubleValue() * 1_000_000_000L)).format(CLOCK_FORMAT);
+            }
+
+            @Override
+            public Number fromString(String s) {
+                return 0;
+            }
+        });
         return chart;
     }
 
@@ -921,6 +975,14 @@ public class MainController {
             nodes.add(priceCards);
         }
 
+        // Bonus: how each option's price moved as the event was traded.
+        List<List<ChartPointDTO>> priceHistories = new ArrayList<>();
+        for (OptionDTO option : dto.getOptions()) {
+            priceHistories.add(option.getPriceHistory());
+        }
+        nodes.add(centerLabel(sectionLabel("Price over time")));
+        nodes.add(optionPriceChart(optionNames, priceHistories, "Price ($)"));
+
         List<TransactionDTO> history = new ArrayList<>(dto.getTransactions());
         Collections.reverse(history);
         if (viewingUserName != null) {
@@ -1037,6 +1099,14 @@ public class MainController {
             books.getChildren().add(bookPanel(dto.getOptionBooks().get(i), dto.getId(), i, active, isWinner, viewingUserName, dto.getBaseValue(), onChange));
         }
         nodes.add(books);
+
+        // Bonus: how each option's traded price moved as the book filled.
+        List<List<ChartPointDTO>> priceHistories = new ArrayList<>();
+        for (OptionBookDTO book : dto.getOptionBooks()) {
+            priceHistories.add(book.getPriceHistory());
+        }
+        nodes.add(centerLabel(sectionLabel("Price over time")));
+        nodes.add(optionPriceChart(optionNames, priceHistories, "Traded price ($)"));
 
         if (viewingUserName == null) {
             // Events tab: a read-only overview of every participant's position - appropriate here, since
