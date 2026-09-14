@@ -1,5 +1,6 @@
 package guessmarket.dto.orderbook;
 
+import guessmarket.dto.ChartPointDTO;
 import java.util.List;
 
 public class OptionBookDTO
@@ -12,8 +13,10 @@ public class OptionBookDTO
     private final Double spread;
     private final List<OrderDTO> bids;
     private final List<OrderDTO> asks;
+    /** How this option's traded price has moved over time, oldest first. */
+    private final List<ChartPointDTO> priceHistory;
 
-    public OptionBookDTO(final String optionName, final Double last, final Double bid, final Double ask, final Double mid, final Double spread, final List<OrderDTO> bids, final List<OrderDTO> asks)
+    public OptionBookDTO(final String optionName, final Double last, final Double bid, final Double ask, final Double mid, final Double spread, final List<OrderDTO> bids, final List<OrderDTO> asks, final List<ChartPointDTO> priceHistory)
     {
         this.optionName = optionName;
         this.last = last;
@@ -23,6 +26,7 @@ public class OptionBookDTO
         this.spread = spread;
         this.bids = bids;
         this.asks = asks;
+        this.priceHistory = priceHistory;
     }
 
     public String getOptionName()
@@ -63,5 +67,10 @@ public class OptionBookDTO
     public List<OrderDTO> getAsks()
     {
         return asks;
+    }
+
+    public List<ChartPointDTO> getPriceHistory()
+    {
+        return priceHistory;
     }
 }

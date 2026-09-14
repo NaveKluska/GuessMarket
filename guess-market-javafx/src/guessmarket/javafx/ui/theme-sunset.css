@@ -1,0 +1,93 @@
+/* ---------------------------------------------------------------------------------------------
+   Skin: Sunset - a warm, compact light scheme.
+
+   Same approach as theme-midnight.css: layered on top of main.css, redefining only the colour
+   tokens and the fonts. See that file's header for why both -gm-* and -fx-* groups are set.
+   Where Midnight is dark, serif and one step larger, Sunset is warm, sans-serif and one step
+   tighter - so the three skins differ in background, in controls, and in both font and size.
+   --------------------------------------------------------------------------------------------- */
+.root {
+    /* --- JavaFX's own base palette, so built-in controls follow --- */
+    -fx-base: #fdf6ec;
+    -fx-background: #fdf6ec;
+    -fx-control-inner-background: #fffaf3;
+    -fx-control-inner-background-alt: #f7ecdc;
+    -fx-accent: #c2410c;
+    -fx-default-button: #c2410c;
+    -fx-focus-color: #c2410c;
+    -fx-faint-focus-color: rgba(194,65,12,0.22);
+    -fx-text-base-color: #43301f;
+    -fx-text-background-color: #43301f;
+    -fx-text-inner-color: #43301f;
+    -fx-selection-bar: #fbe3cd;
+    -fx-selection-bar-non-focused: #f3e5d5;
+    -fx-mark-color: #43301f;
+
+    /* --- the application's tokens --- */
+    -gm-surface: #fffaf3;
+    -gm-bg-alt: #f7ecdc;
+    -gm-bg-soft: #fdf6ec;
+    -gm-chip: #f3e2cd;
+    -gm-chip-hover: #ecd5b9;
+
+    -gm-text: #43301f;
+    -gm-text-muted: #7a6250;
+    -gm-text-faint: #a68c74;
+
+    -gm-border: #ecdcc7;
+    -gm-border-strong: #ddc8ab;
+    -gm-border-toolbar: #e5d3ba;
+    -gm-border-control: #cfb392;
+    -gm-border-focus: #c2410c;
+
+    -gm-accent: #c2410c;
+    -gm-accent-dark: #9a330a;
+    -gm-accent-soft: #fbe3cd;
+    -gm-accent-tint: rgba(194,65,12,0.16);
+
+    -gm-positive: #15803d;
+    -gm-positive-dark: #116630;
+    -gm-positive-soft: rgba(21,128,61,0.14);
+    -gm-negative: #b91c1c;
+    -gm-negative-soft: rgba(185,28,28,0.14);
+
+    -gm-lmsr: #7e22ce;
+    -gm-lmsr-soft: rgba(126,34,206,0.13);
+    -gm-book: #a16207;
+    -gm-book-soft: rgba(161,98,7,0.15);
+    -gm-mm: #be185d;
+    -gm-mm-soft: rgba(190,24,93,0.13);
+    -gm-account: #0f766e;
+    -gm-account-soft: rgba(15,118,110,0.13);
+}
+
+/* --- fonts: a different sans face, and every label one step tighter --- */
+.app-root { -fx-font-family: "Trebuchet MS", sans-serif; }
+
+.filepath-label        { -fx-font-family: "Lucida Console", monospace; -fx-font-size: 10px; }
+.meta-value            { -fx-font-family: "Lucida Console", monospace; -fx-font-size: 12px; }
+.meta-value-money      { -fx-font-family: "Lucida Console", monospace; -fx-font-size: 12px; }
+.price-card-value      { -fx-font-family: "Lucida Console", monospace; -fx-font-size: 24px; }
+.position-card-shares  { -fx-font-family: "Lucida Console", monospace; -fx-font-size: 17px; }
+.position-card-paid    { -fx-font-family: "Lucida Console", monospace; -fx-font-size: 11px; }
+.stat-value            { -fx-font-family: "Lucida Console", monospace; -fx-font-size: 11px; }
+.pl-positive           { -fx-font-family: "Lucida Console", monospace; -fx-font-size: 12px; }
+.pl-negative           { -fx-font-family: "Lucida Console", monospace; -fx-font-size: 12px; }
+
+.brand-title             { -fx-font-size: 13.5px; }
+.animations-toggle .label{ -fx-font-size: 10px; }
+.filter-label            { -fx-font-size: 9px; }
+.placeholder-label       { -fx-font-size: 12px; }
+.hint-chip               { -fx-font-size: 10px; }
+.event-cell-name         { -fx-font-size: 12px; }
+.event-cell-meta         { -fx-font-size: 10px; }
+.pill                    { -fx-font-size: 9px; }
+.detail-title            { -fx-font-size: 16px; }
+.detail-desc             { -fx-font-size: 11.5px; }
+.meta-label, .stat-label { -fx-font-size: 9px; }
+.section-label           { -fx-font-size: 10px; }
+.section-card-title      { -fx-font-size: 13.5px; }
+.price-card-chance       { -fx-font-size: 11.5px; }
+.price-card-shares       { -fx-font-size: 11.5px; }
+.book-panel-title        { -fx-font-size: 12px; }
+.winner-banner-label     { -fx-font-size: 13.5px; }

@@ -1,5 +1,6 @@
 package guessmarket.javafx.ui;
 
+import guessmarket.dto.ChartPointDTO;
 import guessmarket.dto.EventDetailsDTO;
 import guessmarket.dto.EventSummaryDTO;
 import guessmarket.dto.OptionDTO;
@@ -28,6 +29,9 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.text.TextAlignment;
+import javafx.scene.chart.LineChart;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.XYChart;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
@@ -89,6 +93,20 @@ public class MainController {
     @FXML
     private CheckBox animationsToggle;
 
+    /** Bonus: skin picker. Starts on the default scheme - see initialise. */
+    @FXML
+    private ComboBox<String> skinCombo;
+
+    /**
+     * The selectable skins, in display order. The first is the default look that main.css already
+     * provides on its own, so it maps to no extra stylesheet at all; the others each add one file
+     * on top which redefines the colour tokens and fonts.
+     */
+    private static final String DEFAULT_SKIN = "Classic";
+    private static final Map<String, String> SKIN_STYLESHEETS = new LinkedHashMap<>(Map.of(
+        "Midnight", "/guessmarket/javafx/ui/theme-midnight.css",
+        "Sunset", "/guessmarket/javafx/ui/theme-sunset.css"));
+
     @FXML
     private Button loadFileButton;
 
@@ -138,7 +156,40 @@ public class MainController {
         userListView.setCellFactory(list -> new UserCell());
         userListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> showUserDetails(newVal));
 
+        skinCombo.getItems().add(DEFAULT_SKIN);
+        skinCombo.getItems().addAll(SKIN_STYLESHEETS.keySet());
+        skinCombo.getSelectionModel().select(DEFAULT_SKIN);
+        skinCombo.setOnAction(e -> applySkin(skinCombo.getValue()));
+
         loadFileButton.setOnAction(event -> onLoadFileClicked());
+    }
+
+    /**
+     * Swaps the active skin. main.css always stays applied and supplies the layout; a skin is one
+     * extra stylesheet layered on top of it that redefines the colour tokens and fonts. Selecting
+     * the default simply removes any skin, leaving main.css on its own.
+     */
+    private void applySkin(String skinName) {
+        if (skinCombo.getScene() == null) {
+            return;
+        }
+        List<String> sheets = skinCombo.getScene().getStylesheets();
+        for (String path : SKIN_STYLESHEETS.values()) {
+            sheets.remove(stylesheetUrl(path));
+        }
+        String selected = SKIN_STYLESHEETS.get(skinName);
+        if (selected != null) {
+            // Added last so it takes precedence over main.css.
+            sheets.add(stylesheetUrl(selected));
+        }
+    }
+
+    private String stylesheetUrl(String resourcePath) {
+        java.net.URL url = getClass().getResource(resourcePath);
+        if (url == null) {
+            throw new IllegalStateException("Missing stylesheet: " + resourcePath);
+        }
+        return url.toExternalForm();
     }
 
     // ---------------------------------------------------------------- loading
@@ -520,6 +571,81 @@ public class MainController {
             region.setMaxWidth(Double.MAX_VALUE);
         }
         return row;
+    }
+
+    // ---------------------------------------------------------------- bonus: charts
+    //
+    // Two charts, both built from history the engine hands over ready-made:
+    //   - an event's option prices as trading progressed
+    //   - a user's account balance over time
+    // The brief allows a price to be plotted against either time or the trades themselves; trade
+    // number is used because every trade then gets equal spacing, which reads far better than
+    // clustering everything into the few seconds a demo session actually takes. A balance is asked
+    // for against time specifically, so that one is plotted against elapsed seconds.
+
+    private static final int CHART_HEIGHT = 260;
+
+    /** An empty line chart set up the way both of the charts below want it. */
+    private LineChart<Number, Number> emptyChart(String xLabel, String yLabel) {
+        NumberAxis xAxis = new NumberAxis();
+        xAxis.setLabel(xLabel);
+        xAxis.setMinorTickVisible(false);
+        NumberAxis yAxis = new NumberAxis();
+        yAxis.setLabel(yLabel);
+        yAxis.setForceZeroInRange(false);
+
+        LineChart<Number, Number> chart = new LineChart<>(xAxis, yAxis);
+        chart.setPrefHeight(CHART_HEIGHT);
+        chart.setMinHeight(CHART_HEIGHT);
+        chart.setAnimated(false); // chart animation is unrelated to the animations bonus toggle
+        chart.setCreateSymbols(true);
+        chart.getStyleClass().add("gm-chart");
+        return chart;
+    }
+
+    /** Prices for every option of an event, plotted against trade number. */
+    private Node optionPriceChart(List<String> optionNames, List<List<ChartPointDTO>> histories, String yLabel) {
+        boolean anyData = false;
+        for (List<ChartPointDTO> h : histories) {
+            if (h != null && h.size() > 1) {
+                anyData = true;
+            }
+        }
+        if (!anyData) {
+            return centerLabel(placeholder("No trades yet - the price chart appears once trading starts."));
+        }
+
+        LineChart<Number, Number> chart = emptyChart("Trade number", yLabel);
+        for (int i = 0; i < histories.size(); i++) {
+            List<ChartPointDTO> points = histories.get(i);
+            if (points == null || points.isEmpty()) {
+                continue;
+            }
+            XYChart.Series<Number, Number> series = new XYChart.Series<>();
+            series.setName(optionNames.get(i));
+            for (int p = 0; p < points.size(); p++) {
+                series.getData().add(new XYChart.Data<>(p, points.get(p).getValue()));
+            }
+            chart.getData().add(series);
+        }
+        return chart;
+    }
+
+    /** A single user's account balance, plotted against seconds elapsed since their first record. */
+    private Node balanceChart(List<ChartPointDTO> history) {
+        if (history == null || history.size() < 2) {
+            return centerLabel(placeholder("No account activity yet - the balance chart appears after the first action."));
+        }
+        LineChart<Number, Number> chart = emptyChart("Seconds elapsed", "Balance ($)");
+        XYChart.Series<Number, Number> series = new XYChart.Series<>();
+        series.setName("Account balance");
+        LocalDateTime start = history.get(0).getAt();
+        for (ChartPointDTO point : history) {
+            double seconds = java.time.Duration.between(start, point.getAt()).toMillis() / 1000.0;
+            series.getData().add(new XYChart.Data<>(seconds, point.getValue()));
+        }
+        chart.getData().add(series);
+        return chart;
     }
 
     // ---------------------------------------------------------------- bonus: animations

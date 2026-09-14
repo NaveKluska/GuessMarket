@@ -1,0 +1,99 @@
+/* ---------------------------------------------------------------------------------------------
+   Skin: Midnight - a dark scheme.
+
+   Layered ON TOP of main.css rather than replacing it: main.css still supplies every shape,
+   spacing and radius, and this file only redefines the colour tokens and the fonts. That is why a
+   skin is ~100 lines instead of another 450.
+
+   Two groups of colours are redefined here:
+     -gm-*  the application's own tokens, declared in main.css
+     -fx-*  JavaFX's built-in modena tokens, so that stock controls (tables, spinners, text fields,
+            scroll bars, tab headers) follow the skin too. Without these the custom panels would go
+            dark while every table stayed white.
+   --------------------------------------------------------------------------------------------- */
+.root {
+    /* --- JavaFX's own base palette, so built-in controls follow --- */
+    -fx-base: #1e2130;
+    -fx-background: #1e2130;
+    -fx-control-inner-background: #232637;
+    -fx-control-inner-background-alt: #1e2130;
+    -fx-accent: #7c8cff;
+    -fx-default-button: #7c8cff;
+    -fx-focus-color: #7c8cff;
+    -fx-faint-focus-color: rgba(124,140,255,0.25);
+    -fx-text-base-color: #eef0f8;
+    -fx-text-background-color: #eef0f8;
+    -fx-text-inner-color: #eef0f8;
+    -fx-selection-bar: #2b3157;
+    -fx-selection-bar-non-focused: #2a2e42;
+    -fx-mark-color: #eef0f8;
+    -fx-mark-highlight-color: transparent;
+
+    /* --- the application's tokens --- */
+    -gm-surface: #1e2130;
+    -gm-bg-alt: #171926;
+    -gm-bg-soft: #232637;
+    -gm-chip: #2a2e42;
+    -gm-chip-hover: #343954;
+
+    -gm-text: #eef0f8;
+    -gm-text-muted: #a9b0c7;
+    -gm-text-faint: #7d849c;
+
+    -gm-border: #2f3450;
+    -gm-border-strong: #3b4162;
+    -gm-border-toolbar: #2f3450;
+    -gm-border-control: #4a5173;
+    -gm-border-focus: #6b74a3;
+
+    -gm-accent: #7c8cff;
+    -gm-accent-dark: #6675f0;
+    -gm-accent-soft: #2b3157;
+    -gm-accent-tint: rgba(124,140,255,0.22);
+
+    -gm-positive: #34d399;
+    -gm-positive-dark: #23b482;
+    -gm-positive-soft: rgba(52,211,153,0.16);
+    -gm-negative: #f87171;
+    -gm-negative-soft: rgba(248,113,113,0.16);
+
+    -gm-lmsr: #c4b5fd;
+    -gm-lmsr-soft: rgba(196,181,253,0.16);
+    -gm-book: #fbbf24;
+    -gm-book-soft: rgba(251,191,36,0.16);
+    -gm-mm: #f9a8d4;
+    -gm-mm-soft: rgba(249,168,212,0.16);
+    -gm-account: #5eead4;
+    -gm-account-soft: rgba(94,234,212,0.16);
+}
+
+/* --- fonts: a serif face, and every label one step larger --- */
+.app-root { -fx-font-family: "Georgia", serif; }
+
+.filepath-label        { -fx-font-family: "Courier New", monospace; -fx-font-size: 12px; }
+.meta-value            { -fx-font-family: "Courier New", monospace; -fx-font-size: 14.5px; }
+.meta-value-money      { -fx-font-family: "Courier New", monospace; -fx-font-size: 14.5px; }
+.price-card-value      { -fx-font-family: "Courier New", monospace; -fx-font-size: 30px; }
+.position-card-shares  { -fx-font-family: "Courier New", monospace; -fx-font-size: 21px; }
+.position-card-paid    { -fx-font-family: "Courier New", monospace; -fx-font-size: 13px; }
+.stat-value            { -fx-font-family: "Courier New", monospace; -fx-font-size: 13px; }
+.pl-positive           { -fx-font-family: "Courier New", monospace; -fx-font-size: 14.5px; }
+.pl-negative           { -fx-font-family: "Courier New", monospace; -fx-font-size: 14.5px; }
+
+.brand-title             { -fx-font-size: 16.5px; }
+.animations-toggle .label{ -fx-font-size: 12px; }
+.filter-label            { -fx-font-size: 11px; }
+.placeholder-label       { -fx-font-size: 14.5px; }
+.hint-chip               { -fx-font-size: 12px; }
+.event-cell-name         { -fx-font-size: 14.5px; }
+.event-cell-meta         { -fx-font-size: 12px; }
+.pill                    { -fx-font-size: 11px; }
+.detail-title            { -fx-font-size: 20px; }
+.detail-desc             { -fx-font-size: 14px; }
+.meta-label, .stat-label { -fx-font-size: 11px; }
+.section-label           { -fx-font-size: 12px; }
+.section-card-title      { -fx-font-size: 16.5px; }
+.price-card-chance       { -fx-font-size: 14px; }
+.price-card-shares       { -fx-font-size: 14px; }
+.book-panel-title        { -fx-font-size: 14.5px; }
+.winner-banner-label     { -fx-font-size: 16.5px; }

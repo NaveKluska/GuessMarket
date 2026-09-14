@@ -14,6 +14,7 @@ public class OrderBook
     private final List<Order> sellOrders = new ArrayList<>();
     private long nextSequence = 0;
     private Double lastPrice;
+    private final List<PricePoint> priceHistory = new ArrayList<>();
 
     /**
      * Submits a new order: matches it against the opposite side, then rests whatever's left.
@@ -136,6 +137,16 @@ public class OrderBook
     public void recordLastPrice(final double price)
     {
         this.lastPrice = price;
+        // Every traded price for this option, in order, so the price can be charted over time.
+        // Recorded here because this is the single point every fill and every mint already reports
+        // its price through - nothing that moves the price can bypass it.
+        this.priceHistory.add(new PricePoint(java.time.LocalDateTime.now(), price));
+    }
+
+    /** Every price this option has traded at, oldest first. Unmodifiable - the book owns the history. */
+    public List<PricePoint> getPriceHistory()
+    {
+        return java.util.Collections.unmodifiableList(priceHistory);
     }
 
     public MarketQuote getQuote()

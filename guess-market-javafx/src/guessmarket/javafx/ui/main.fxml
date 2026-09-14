@@ -32,6 +32,10 @@
                 <!-- Bonus: deliberately unselected, so the application starts with animations off
                      and the reviewer switches them on only to assess them. -->
                 <CheckBox fx:id="animationsToggle" text="Animations" selected="false" styleClass="animations-toggle"/>
+                <!-- Bonus: skin picker. Populated in the controller and left on "Classic", so the
+                     application starts in its default scheme. -->
+                <Label text="SKIN" styleClass="filter-label"/>
+                <ComboBox fx:id="skinCombo" styleClass="skin-combo"/>
             </HBox>
         </VBox>
     </top>

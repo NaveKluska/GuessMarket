@@ -1,5 +1,8 @@
 package guessmarket.engine.models;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class User {
@@ -9,11 +12,31 @@ public class User {
 
     private final List<Integer> marketMakerForEvents;
 
+    /**
+     * Every value this user's balance has held, oldest first, for plotting their account over time.
+     * Recorded inside increaseBalance/decreaseBalance rather than at the call sites: those two
+     * methods are the only way a balance can ever move, so anything that touches the money is
+     * captured automatically and no future caller can forget to record itself.
+     */
+    private final List<BalancePoint> balanceHistory = new ArrayList<>();
+
     public User(String name, double initialCash, List<Integer> marketMakerForEvents) {
         this.name = name;
         this.initialCash = initialCash;
         this.blocked = false;
         this.marketMakerForEvents = marketMakerForEvents;
+        // The opening balance is a real data point - without it a chart would start at the user's
+        // first trade rather than at what they began with.
+        this.balanceHistory.add(new BalancePoint(LocalDateTime.now(), initialCash));
+    }
+
+    /** This user's balance over time, oldest first. Unmodifiable - the history is the engine's to write. */
+    public List<BalancePoint> getBalanceHistory() {
+        return Collections.unmodifiableList(balanceHistory);
+    }
+
+    private void recordBalance() {
+        balanceHistory.add(new BalancePoint(LocalDateTime.now(), this.initialCash));
     }
 
     public String getName() {
@@ -35,6 +58,7 @@ public class User {
         if (this.initialCash >= 0) {
             this.blocked = false;
         }
+        recordBalance();
     }
 
     public void decreaseBalance(double amount) {
@@ -42,6 +66,7 @@ public class User {
             throw new IllegalArgumentException("Amount to decrease balance by cannot be negative.");
         }
         this.initialCash -= amount;
+        recordBalance();
     }
 
     public List<Integer> getMarketMakerForEvents() {

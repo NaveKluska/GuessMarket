@@ -26,7 +26,21 @@ public class LmsrEvent extends Event {
 
     @Override
     public double getOptionProbability(int optionIndex) {
-        final int[] shares = sharesSnapshot(-1, 0);
+        return probabilityAt(sharesSnapshot(-1, 0), optionIndex);
+    }
+
+    /**
+     * The price of an option for an arbitrary set of share counts, rather than the current ones.
+     * <p>
+     * Pure: it reads nothing from the event and changes nothing, which is what lets a caller
+     * reconstruct the whole price history by replaying past share counts through it without
+     * disturbing live state. Uses the same max-subtracted form as {@link #cost}, for the same
+     * overflow reason.
+     *
+     * @param shares      share counts per option, indexed the same way as getOptions()
+     * @param optionIndex the option whose price is wanted
+     */
+    public double probabilityAt(final int[] shares, final int optionIndex) {
         final double max = maxExponent(shares);
         double sum = 0.0;
         for (int q : shares) {

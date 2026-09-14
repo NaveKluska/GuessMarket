@@ -9,14 +9,17 @@ public class UserSummaryDTO
     private final boolean blocked;
     private final boolean marketMaker;
     private final List<Integer> relevantEventIds;
+    /** How this user's account balance has moved over time, oldest first. */
+    private final List<ChartPointDTO> balanceHistory;
 
-    public UserSummaryDTO(final String name, final double balance, final boolean blocked, final boolean marketMaker, final List<Integer> relevantEventIds)
+    public UserSummaryDTO(final String name, final double balance, final boolean blocked, final boolean marketMaker, final List<Integer> relevantEventIds, final List<ChartPointDTO> balanceHistory)
     {
         this.name = name;
         this.balance = balance;
         this.blocked = blocked;
         this.marketMaker = marketMaker;
         this.relevantEventIds = relevantEventIds;
+        this.balanceHistory = balanceHistory;
     }
 
     public String getName()
@@ -43,5 +46,10 @@ public class UserSummaryDTO
     public List<Integer> getRelevantEventIds()
     {
         return relevantEventIds;
+    }
+
+    public List<ChartPointDTO> getBalanceHistory()
+    {
+        return balanceHistory;
     }
 }

@@ -2,6 +2,7 @@ package guessmarket.engine.core.impl;
 
 import guessmarket.engine.core.api.MarketEngine;
 import guessmarket.engine.core.api.MarketMethodSpec;
+import guessmarket.dto.ChartPointDTO;
 import guessmarket.dto.EventDetailsDTO;
 import guessmarket.dto.EventSummaryDTO;
 import guessmarket.dto.OptionDTO;
@@ -13,6 +14,7 @@ import guessmarket.dto.orderbook.OptionBookDTO;
 import guessmarket.dto.orderbook.OrderBookEventDetailsDTO;
 import guessmarket.dto.orderbook.OrderDTO;
 import guessmarket.dto.orderbook.ParticipantHoldingDTO;
+import guessmarket.engine.models.BalancePoint;
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
 import guessmarket.engine.models.EventStatus;
@@ -21,6 +23,7 @@ import guessmarket.engine.models.orderbook.Fill;
 import guessmarket.engine.models.orderbook.MarketQuote;
 import guessmarket.engine.models.orderbook.Mint;
 import guessmarket.engine.models.orderbook.Order;
+import guessmarket.engine.models.orderbook.PricePoint;
 import guessmarket.engine.models.orderbook.OrderBook;
 import guessmarket.engine.models.orderbook.OrderBookEvent;
 import guessmarket.engine.models.orderbook.OrderSide;
@@ -36,6 +39,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -162,13 +166,22 @@ public class MarketEngineImpl implements MarketEngine
                 }
             }
             final boolean isMarketMaker = user.getMarketMakerForEvents() != null && !user.getMarketMakerForEvents().isEmpty();
-            result.add(new UserSummaryDTO(user.getName(), user.getBalance(), user.isBlocked(), isMarketMaker, relevantEventIds));
+            result.add(new UserSummaryDTO(user.getName(), user.getBalance(), user.isBlocked(), isMarketMaker, relevantEventIds, balanceHistoryOf(user)));
         }
         return result;
     }
 
     private boolean isParticipant(final String userName, final Event event) {
         return event.getParticipants().contains(userName);
+    }
+
+    /** Converts a user's recorded balance readings into plottable points. */
+    private List<ChartPointDTO> balanceHistoryOf(final User user) {
+        final List<ChartPointDTO> points = new ArrayList<>();
+        for (final BalancePoint point : user.getBalanceHistory()) {
+            points.add(new ChartPointDTO(point.at(), point.balance()));
+        }
+        return points;
     }
 
     @Override
@@ -687,11 +700,13 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     private LmsrEventDetailsDTO mapLmsrDetailsDTO(final Event event) {
-        final List<OptionDTO> optionDTOs = new ArrayList<>();
         final List<Option> options = event.getOptions();
+        final List<List<ChartPointDTO>> priceHistories = lmsrPriceHistories((LmsrEvent) event);
+
+        final List<OptionDTO> optionDTOs = new ArrayList<>();
         for (int i = 0; i < options.size(); i++) {
             final Option option = options.get(i);
-            optionDTOs.add(new OptionDTO(option.getName(), option.getSharesBought(), event.getOptionProbability(i)));
+            optionDTOs.add(new OptionDTO(option.getName(), option.getSharesBought(), event.getOptionProbability(i), priceHistories.get(i)));
         }
 
         final List<TransactionDTO> transactionDTOs = new ArrayList<>();
@@ -715,7 +730,7 @@ public class MarketEngineImpl implements MarketEngine
             final MarketQuote quote = event.getQuote(i);
             final List<OrderDTO> bids = toOrderDTOs(event.getMarket().getBook(i).bestBuyOrdersFirst());
             final List<OrderDTO> asks = toOrderDTOs(event.getMarket().getBook(i).bestSellOrdersFirst());
-            optionBooks.add(new OptionBookDTO(option.getName(), quote.getLast(), quote.getBid(), quote.getAsk(), quote.getMid(), quote.getSpread(), bids, asks));
+            optionBooks.add(new OptionBookDTO(option.getName(), quote.getLast(), quote.getBid(), quote.getAsk(), quote.getMid(), quote.getSpread(), bids, asks, toChartPoints(event.getMarket().getBook(i).getPriceHistory())));
         }
 
         final boolean closed = event.getStatus() == EventStatus.CLOSED;
@@ -743,6 +758,56 @@ public class MarketEngineImpl implements MarketEngine
             optionBooks, participants, event.getWinningOptionName(),
             eventMarketMakers.get(event.getId())
         );
+    }
+
+    /**
+     * Reconstructs each LMSR option's price after every trade, for the price-over-time chart.
+     * <p>
+     * An LMSR price depends only on how many shares of each option have been bought, so replaying
+     * the event's transactions in order and re-asking the event for its prices at each step
+     * reproduces the whole history exactly - there is no need to have stored it as trading happened.
+     * The shares are restored afterwards, so this read-only query leaves the event untouched.
+     *
+     * @return one list of points per option, in option order, each starting at the opening price
+     */
+    private List<List<ChartPointDTO>> lmsrPriceHistories(final LmsrEvent event) {
+        final List<Option> options = event.getOptions();
+        final List<List<ChartPointDTO>> histories = new ArrayList<>();
+        for (int i = 0; i < options.size(); i++) {
+            histories.add(new ArrayList<>());
+        }
+
+        // Replayed in a local array and fed through the event's pure price function, so nothing in
+        // the live event is touched by what is only a read.
+        final int[] shares = new int[options.size()];
+        final List<Transaction> transactions = event.getTransactions();
+
+        // The opening price of every option, before anyone traded.
+        final LocalDateTime start = transactions.isEmpty() ? LocalDateTime.now() : transactions.get(0).getTimestamp();
+        for (int i = 0; i < options.size(); i++) {
+            histories.get(i).add(new ChartPointDTO(start, event.probabilityAt(shares, i)));
+        }
+
+        for (final Transaction tx : transactions) {
+            for (int i = 0; i < options.size(); i++) {
+                if (options.get(i).getName().equals(tx.getOptionName())) {
+                    shares[i] += tx.getQuantity();
+                }
+            }
+            for (int i = 0; i < options.size(); i++) {
+                histories.get(i).add(new ChartPointDTO(tx.getTimestamp(), event.probabilityAt(shares, i)));
+            }
+        }
+        return histories;
+    }
+
+    /** Converts the order book's recorded traded prices into plottable points. */
+    private List<ChartPointDTO> toChartPoints(final List<PricePoint> points) {
+        final List<ChartPointDTO> result = new ArrayList<>();
+        for (final PricePoint point : points) {
+            result.add(new ChartPointDTO(point.at(), point.price()));
+        }
+        return result;
     }
 
     private List<OrderDTO> toOrderDTOs(final List<Order> orders) {
