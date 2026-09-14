@@ -2,6 +2,7 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
@@ -28,6 +29,9 @@
                 <Button fx:id="loadFileButton" text="Load File..." styleClass="primary-button"/>
                 <Label fx:id="filePathLabel" text="No file loaded" styleClass="filepath-label" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
                 <ProgressBar fx:id="loadProgressBar" progress="0" visible="false" managed="false"/>
+                <!-- Bonus: deliberately unselected, so the application starts with animations off
+                     and the reviewer switches them on only to assess them. -->
+                <CheckBox fx:id="animationsToggle" text="Animations" selected="false" styleClass="animations-toggle"/>
             </HBox>
         </VBox>
     </top>

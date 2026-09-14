@@ -14,9 +14,14 @@ import guessmarket.engine.core.api.MarketEngine;
 import guessmarket.engine.core.api.MarketMethodSpec;
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.orderbook.OrderSide;
+import javafx.animation.FadeTransition;
+import javafx.animation.ParallelTransition;
+import javafx.animation.ScaleTransition;
+import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.concurrent.Task;
+import javafx.util.Duration;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
@@ -58,7 +63,10 @@ import java.util.Map;
 
 public class MainController {
 
-    private static final int SIMULATED_LOAD_DELAY_MS = 1200;
+    // The brief asks for a delay "of a second or two" to simulate progress, since real parsing is
+    // near-instant. Split across PROGRESS_STEPS updates so the bar fills smoothly rather than jumping.
+    private static final int SIMULATED_LOAD_DELAY_MS = 2000;
+    private static final int PROGRESS_STEPS = 80;
     // Locale.ENGLISH is mandatory here, not cosmetic: without it, month names silently follow the JVM's
     // default locale (e.g. rendering "ספט" instead of "Sep" on a Hebrew-locale machine), and the spec
     // requires all input/output to be English only.
@@ -76,6 +84,10 @@ public class MainController {
 
     @FXML
     private ProgressBar loadProgressBar;
+
+    /** Bonus: master switch for the UI animations. Starts unselected - see main.fxml. */
+    @FXML
+    private CheckBox animationsToggle;
 
     @FXML
     private Button loadFileButton;
@@ -143,11 +155,16 @@ public class MainController {
         Task<List<EventSummaryDTO>> loadTask = new Task<>() {
             @Override
             protected List<EventSummaryDTO> call() throws Exception {
-                updateProgress(0.2, 1);
+                updateProgress(0, PROGRESS_STEPS);
                 engine.loadData(selectedFile.getAbsolutePath());
-                updateProgress(0.6, 1);
-                Thread.sleep(SIMULATED_LOAD_DELAY_MS);
-                updateProgress(1, 1);
+                // Parsing itself is near-instant, so the brief asks for a short simulated delay.
+                // Reporting that delay in many small steps, rather than a couple of jumps, is what
+                // makes the bar actually travel left to right instead of standing still at a
+                // fraction and then snapping to full.
+                for (int step = 1; step <= PROGRESS_STEPS; step++) {
+                    Thread.sleep(SIMULATED_LOAD_DELAY_MS / PROGRESS_STEPS);
+                    updateProgress(step, PROGRESS_STEPS);
+                }
                 return engine.getAllEvents();
             }
         };
@@ -358,6 +375,7 @@ public class MainController {
         }
 
         userDetailPane.getChildren().setAll(nodes);
+        animateDetailPane(userDetailPane);
     }
 
     /**
@@ -502,6 +520,68 @@ public class MainController {
             region.setMaxWidth(Double.MAX_VALUE);
         }
         return row;
+    }
+
+    // ---------------------------------------------------------------- bonus: animations
+    //
+    // Three short animations accompanying the things the user actually does: opening a detail view,
+    // completing a trade, and resolving an event. Every one is well under the one-second mark (the
+    // brief allows up to two), and every one is gated behind animationsToggle. When that is off
+    // these methods return before building any Transition at all, so nothing is scheduled and
+    // nothing is slowed down - the node is simply left in its final state.
+    //
+    // The file-loading progress bar is deliberately NOT one of these: it is a mandatory part of the
+    // exercise rather than a bonus flourish, so it must behave the same whether or not animations
+    // are switched on. It fills smoothly because the load task reports progress in small steps.
+
+    /** True only when the reviewer has switched animations on; false on startup and if the control is absent. */
+    private boolean animationsOn() {
+        return animationsToggle != null && animationsToggle.isSelected();
+    }
+
+    /** Animation 1: a detail pane fades and eases in as its content is swapped. */
+    private void animateDetailPane(Node pane) {
+        if (!animationsOn()) {
+            return;
+        }
+        FadeTransition fade = new FadeTransition(Duration.millis(260), pane);
+        fade.setFromValue(0.0);
+        fade.setToValue(1.0);
+        TranslateTransition rise = new TranslateTransition(Duration.millis(260), pane);
+        rise.setFromY(12);
+        rise.setToY(0);
+        new ParallelTransition(fade, rise).play();
+    }
+
+    /** Animation 2: a quick pulse on the panel a trade just changed, confirming it landed. */
+    private void animateTradeSuccess(Node node) {
+        if (!animationsOn() || node == null) {
+            return;
+        }
+        ScaleTransition pulse = new ScaleTransition(Duration.millis(150), node);
+        pulse.setFromX(1.0);
+        pulse.setFromY(1.0);
+        pulse.setToX(1.02);
+        pulse.setToY(1.02);
+        pulse.setAutoReverse(true);
+        pulse.setCycleCount(2);
+        pulse.play();
+    }
+
+    /** Animation 3: the winner banner grows into place when an event is resolved. */
+    private void animateWinnerBanner(Node banner) {
+        if (!animationsOn()) {
+            return;
+        }
+        ScaleTransition grow = new ScaleTransition(Duration.millis(420), banner);
+        grow.setFromX(0.85);
+        grow.setFromY(0.85);
+        grow.setToX(1.0);
+        grow.setToY(1.0);
+        FadeTransition fade = new FadeTransition(Duration.millis(420), banner);
+        fade.setFromValue(0.0);
+        fade.setToValue(1.0);
+        new ParallelTransition(grow, fade).play();
     }
 
     /** A muted one-line note under a form field. Kept short enough to never need wrapping. */
@@ -664,6 +744,7 @@ public class MainController {
             } else if (details instanceof OrderBookEventDetailsDTO) {
                 eventDetailPane.getChildren().setAll(buildOrderBookDetail((OrderBookEventDetailsDTO) details, null, onChange));
             }
+            animateDetailPane(eventDetailPane);
         } catch (Exception e) {
             showError(e.getMessage());
         }
@@ -961,6 +1042,9 @@ public class MainController {
         try {
             action.run();
             onChange.run();
+            // Pulses the pane the trade just rewrote. Run after onChange, since that rebuilds the
+            // detail view and would otherwise discard the node mid-animation.
+            animateTradeSuccess(userDetailPane);
             warnIfNowBlocked(actingUserName);
         } catch (Exception e) {
             showError(e.getMessage());
@@ -1142,6 +1226,7 @@ public class MainController {
         banner.setAlignment(Pos.CENTER);
         banner.getStyleClass().add("winner-banner");
         banner.setPadding(new Insets(10, 14, 10, 14));
+        animateWinnerBanner(banner);
         return banner;
     }
 

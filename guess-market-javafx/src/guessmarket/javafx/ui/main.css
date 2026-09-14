@@ -25,6 +25,44 @@
     -fx-text-overrun: ellipsis;
 }
 
+/* Bonus: the animations switch. Shaped like the pills used elsewhere and tinted with the accent
+   colour while on, so whether animations are currently enabled is obvious at a glance rather than
+   depending on spotting a small tick. */
+.animations-toggle {
+    -fx-background-color: #e9ebf1;
+    -fx-background-radius: 99;
+    -fx-padding: 5 12 5 10;
+    -fx-cursor: hand;
+}
+.animations-toggle .label {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #5b6172;
+}
+.animations-toggle:hover {
+    -fx-background-color: #dfe2ea;
+}
+.animations-toggle > .box {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #c3c7d4;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 2;
+}
+.animations-toggle:selected {
+    -fx-background-color: rgba(76,95,213,0.14);
+}
+.animations-toggle:selected .label {
+    -fx-text-fill: #4c5fd5;
+}
+.animations-toggle:selected > .box {
+    -fx-background-color: #4c5fd5;
+    -fx-border-color: #4c5fd5;
+}
+.animations-toggle:selected > .box > .mark {
+    -fx-background-color: white;
+}
+
 .primary-button {
     -fx-background-color: #4c5fd5;
     -fx-text-fill: white;
