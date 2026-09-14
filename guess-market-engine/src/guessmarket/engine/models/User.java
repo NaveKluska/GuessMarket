@@ -48,6 +48,16 @@ public class User {
         return marketMakerForEvents;
     }
 
+    /**
+     * Records that this user is now the Market Maker of another event - used when a user creates
+     * an event at runtime, so their role there matches one assigned in the loaded file.
+     */
+    public void addMarketMakerEvent(final int eventId) {
+        if (!marketMakerForEvents.contains(eventId)) {
+            marketMakerForEvents.add(eventId);
+        }
+    }
+
     public boolean isBlocked() {
         return blocked;
     }

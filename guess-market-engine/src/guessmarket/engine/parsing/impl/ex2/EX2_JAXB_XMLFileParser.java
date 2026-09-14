@@ -30,8 +30,9 @@ import java.util.Set;
 
 public class EX2_JAXB_XMLFileParser implements FileParser {
 
-    private static final int COMMISSION_VALUE_MAX = 90;
-    private static final int COMMISSION_VALUE_MIN = 0;
+    // Shared with the engine, so a runtime-created event is held to the same bounds as a parsed one.
+    private static final int COMMISSION_VALUE_MAX = Event.COMMISSION_VALUE_MAX;
+    private static final int COMMISSION_VALUE_MIN = Event.COMMISSION_VALUE_MIN;
 
     private final JAXBContext jaxbContext;
 

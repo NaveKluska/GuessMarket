@@ -10,6 +10,10 @@ import java.util.Set;
 
 public abstract class Event implements Serializable
 {
+    /** Commission bounds every event must satisfy, however it came into being - parsed or created at runtime. */
+    public static final int COMMISSION_VALUE_MIN = 0;
+    public static final int COMMISSION_VALUE_MAX = 90;
+
     private static final long serialVersionUID = 1L;
     private final int id;
     private String name;

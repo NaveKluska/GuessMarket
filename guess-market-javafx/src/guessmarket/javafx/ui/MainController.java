@@ -11,9 +11,13 @@ import guessmarket.dto.orderbook.OrderDTO;
 import guessmarket.dto.orderbook.ParticipantHoldingDTO;
 import guessmarket.dto.UserSummaryDTO;
 import guessmarket.engine.core.api.MarketEngine;
+import guessmarket.engine.core.api.MarketMethodSpec;
+import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.orderbook.OrderSide;
+import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.concurrent.Task;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -21,7 +25,10 @@ import javafx.scene.Node;
 import javafx.scene.text.TextAlignment;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -29,6 +36,7 @@ import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.FlowPane;
@@ -37,6 +45,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -310,6 +319,19 @@ public class MainController {
         balanceRow.setAlignment(Pos.CENTER);
         nodes.add(balanceRow);
 
+        // Bonus: this user can found a brand-new event and become its Market Maker.
+        Button createButton = new Button("+ Create Event");
+        createButton.getStyleClass().add("primary-button");
+        createButton.setDisable(user.isBlocked());
+        if (user.isBlocked()) {
+            createButton.setTooltip(new Tooltip("A blocked user cannot create events."));
+        }
+        createButton.setOnAction(e -> openCreateEventDialog(user.getName()));
+        HBox createRow = new HBox(createButton);
+        createRow.setAlignment(Pos.CENTER);
+        createRow.setPadding(new Insets(2, 0, 0, 0));
+        nodes.add(createRow);
+
         SectionCard participationSection = sectionCard("Events participation / owner");
         nodes.add(participationSection.outer());
 
@@ -336,6 +358,157 @@ public class MainController {
         }
 
         userDetailPane.getChildren().setAll(nodes);
+    }
+
+    /**
+     * The "create a new event" form. Collects everything the engine needs, swapping the
+     * method-specific half of the form between LMSR and Order Book as the choice changes.
+     * The engine does the real validation - this dialog just keeps the user's input on screen
+     * when it rejects something, instead of closing and losing what they typed.
+     */
+    private void openCreateEventDialog(String creatorName) {
+        TextField nameField = new TextField();
+        nameField.setPromptText("e.g. Will it snow in Tel Aviv?");
+        TextField descriptionField = new TextField();
+        descriptionField.setPromptText("What exactly is being predicted, and how it resolves");
+
+        ComboBox<String> commissionTypeCombo = new ComboBox<>();
+        commissionTypeCombo.getItems().addAll("On purchase", "On close");
+        commissionTypeCombo.getSelectionModel().selectFirst();
+        Spinner<Integer> commissionSpinner = new Spinner<>(0, 90, 5);
+        commissionSpinner.setEditable(true);
+        commissionSpinner.setPrefWidth(90);
+
+        TextField optionOneField = new TextField();
+        optionOneField.setPromptText("First option");
+        TextField optionTwoField = new TextField();
+        optionTwoField.setPromptText("Second option");
+
+        ComboBox<String> methodCombo = new ComboBox<>();
+        methodCombo.getItems().addAll("LMSR", "Order Book");
+        methodCombo.getSelectionModel().selectFirst();
+
+        Spinner<Integer> bSpinner = new Spinner<>(1, 1_000_000, 100);
+        bSpinner.setEditable(true);
+        bSpinner.setPrefWidth(110);
+        CheckBox allowMintBox = new CheckBox("Allow mint");
+        allowMintBox.setSelected(true);
+        Spinner<Integer> initialSpinner = new Spinner<>(0, 1_000_000, 100);
+        initialSpinner.setEditable(true);
+        initialSpinner.setPrefWidth(110);
+        Spinner<Integer> dSpinner = new Spinner<>(1, 1_000_000, 1);
+        dSpinner.setEditable(true);
+        dSpinner.setPrefWidth(110);
+
+        VBox lmsrFields = new VBox(6, fieldRow("Liquidity (b)", bSpinner),
+            hintLabel("Higher b means steadier prices."),
+            hintLabel("Opening costs the Market Maker b x ln(2)."));
+        VBox bookFields = new VBox(6, fieldRow("Base value (d)", dSpinner),
+            fieldRow("Initial shares", initialSpinner), allowMintBox,
+            hintLabel("Opening costs the Market Maker initial x d,"),
+            hintLabel("and gives them that many of each option."));
+
+        VBox methodBox = new VBox(8, lmsrFields);
+
+        VBox form = new VBox(10,
+            fieldRow("Event name", nameField),
+            fieldRow("Description", descriptionField),
+            fieldRow("Option 1", optionOneField),
+            fieldRow("Option 2", optionTwoField),
+            fieldRow("Commission", commissionTypeCombo),
+            fieldRow("Commission %", commissionSpinner),
+            fieldRow("Trading method", methodCombo),
+            methodBox);
+        form.setPadding(new Insets(4, 2, 4, 2));
+        form.setPrefWidth(440);
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Create Event");
+        dialog.setHeaderText("New event, with " + creatorName + " as its Market Maker");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(form);
+        dialog.getDialogPane().getStylesheets().addAll(userDetailPane.getScene().getStylesheets());
+        dialog.setResizable(true);
+
+        // Sizes the window to exactly what the form needs, then makes that the floor: the dialog
+        // can still be grown, but never dragged smaller than its own content. The minimums are
+        // released first, otherwise they would block sizeToScene() from shrinking the window back
+        // down when switching from the taller Order Book fields to the shorter LMSR ones.
+        Runnable fitToContent = () -> {
+            if (dialog.getDialogPane().getScene().getWindow() instanceof Stage stage) {
+                stage.setMinWidth(0);
+                stage.setMinHeight(0);
+                stage.sizeToScene();
+                stage.setMinWidth(stage.getWidth());
+                stage.setMinHeight(stage.getHeight());
+            }
+        };
+        // Deferred by one pulse: at the moment onShown fires the dialog's window is not fully
+        // realised yet, so reading it back gives nothing to set the floor on.
+        dialog.setOnShown(e -> Platform.runLater(fitToContent));
+
+        // Swapping in the Order Book fields makes the form taller than the LMSR one. Without
+        // re-sizing to the new content the window keeps its old height, which pushes OK and Cancel
+        // off the bottom edge and makes the dialog impossible to submit.
+        methodCombo.setOnAction(e -> {
+            methodBox.getChildren().setAll("LMSR".equals(methodCombo.getValue()) ? lmsrFields : bookFields);
+            fitToContent.run();
+        });
+
+        // Do the creation inside an event filter so a rejection can consume the event and leave the
+        // dialog open with everything the user typed still in place.
+        final int[] createdId = { -1 };
+        Node okButton = dialog.getDialogPane().lookupButton(ButtonType.OK);
+        okButton.addEventFilter(ActionEvent.ACTION, e -> {
+            MarketMethodSpec method = "LMSR".equals(methodCombo.getValue())
+                ? new MarketMethodSpec.Lmsr(bSpinner.getValue())
+                : new MarketMethodSpec.OrderBook(allowMintBox.isSelected(), initialSpinner.getValue(), dSpinner.getValue());
+            CommissionType commissionType = "On close".equals(commissionTypeCombo.getValue())
+                ? CommissionType.ON_CLOSE : CommissionType.ON_PURCHASE;
+            try {
+                createdId[0] = engine.createEvent(creatorName, nameField.getText(), descriptionField.getText(),
+                    commissionSpinner.getValue(), commissionType,
+                    List.of(optionOneField.getText(), optionTwoField.getText()), method);
+            } catch (Exception ex) {
+                showError(ex.getMessage());
+                e.consume();
+            }
+        });
+
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK && createdId[0] > 0) {
+            // Point the inline view at the new event BEFORE refreshing. refreshUsersList() reselects
+            // the creator, which re-renders their details through the selection listener - so doing
+            // this first means that single render already shows the new event, instead of drawing
+            // once with the previous selection and again afterwards.
+            selectedInlineUserName = creatorName;
+            selectedInlineEventId = createdId[0];
+            allEvents.clear();
+            allEvents.addAll(engine.getAllEvents());
+            refreshEventList();
+            refreshUsersList();
+        }
+    }
+
+    /** One labelled form row: a fixed-width caption beside its control. */
+    private HBox fieldRow(String caption, Node control) {
+        Label label = new Label(caption);
+        label.getStyleClass().add("meta-label");
+        label.setMinWidth(120);
+        label.setPrefWidth(120);
+        HBox row = new HBox(10, label, control);
+        row.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(control, Priority.ALWAYS);
+        if (control instanceof Region region) {
+            region.setMaxWidth(Double.MAX_VALUE);
+        }
+        return row;
+    }
+
+    /** A muted one-line note under a form field. Kept short enough to never need wrapping. */
+    private Label hintLabel(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("price-card-chance");
+        return label;
     }
 
     /** A titled, bordered card: a header bar (visually distinct from body content) followed by a body area to add content to. */

@@ -1,6 +1,7 @@
 package guessmarket.engine.core.impl;
 
 import guessmarket.engine.core.api.MarketEngine;
+import guessmarket.engine.core.api.MarketMethodSpec;
 import guessmarket.dto.EventDetailsDTO;
 import guessmarket.dto.EventSummaryDTO;
 import guessmarket.dto.OptionDTO;
@@ -36,8 +37,10 @@ import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MarketEngineImpl implements MarketEngine
@@ -520,6 +523,102 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalArgumentException("Market Maker user '" + mmName + "' does not exist.");
         }
         return mm;
+    }
+
+    @Override
+    public int createEvent(final String creatorName, final String name, final String description,
+                           final int commission, final CommissionType commissionType,
+                           final List<String> optionNames, final MarketMethodSpec method) throws Exception
+    {
+        if (!isDataLoaded) {
+            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
+        }
+
+        final User creator = users.get(creatorName);
+        if (creator == null) {
+            throw new IllegalArgumentException("User '" + creatorName + "' does not exist.");
+        }
+        if (creator.isBlocked()) {
+            throw new IllegalArgumentException("User '" + creatorName + "' has a negative balance and cannot create new events.");
+        }
+
+        final String cleanName = name == null ? "" : name.trim();
+        if (cleanName.isEmpty()) {
+            throw new IllegalArgumentException("Event name cannot be empty.");
+        }
+        final String cleanDescription = description == null ? "" : description.trim();
+        if (cleanDescription.isEmpty()) {
+            throw new IllegalArgumentException("Event description cannot be empty.");
+        }
+        if (commissionType == null) {
+            throw new IllegalArgumentException("A commission type must be chosen.");
+        }
+        // The same bounds the file parser enforces - shared constants rather than repeated literals,
+        // so a created event can never be less valid than a loaded one.
+        if (commission < Event.COMMISSION_VALUE_MIN || commission > Event.COMMISSION_VALUE_MAX) {
+            throw new IllegalArgumentException("Commission value must be between " + Event.COMMISSION_VALUE_MIN
+                + " and " + Event.COMMISSION_VALUE_MAX + " (got " + commission + ").");
+        }
+
+        final List<Option> options = buildOptions(optionNames);
+        final Event created = buildEvent(nextEventId(), cleanName, cleanDescription, commission, commissionType, options, method);
+
+        events.put(created.getId(), created);
+        eventMarketMakers.put(created.getId(), creatorName);
+        creator.addMarketMakerEvent(created.getId());
+        return created.getId();
+    }
+
+    /** Validates and builds the option list, applying the parser's rules: exactly two, named, distinct. */
+    private List<Option> buildOptions(final List<String> optionNames) {
+        if (optionNames == null || optionNames.size() != 2) {
+            throw new IllegalArgumentException("An event must have exactly two options.");
+        }
+        final List<Option> options = new ArrayList<>();
+        final Set<String> seen = new HashSet<>();
+        for (final String raw : optionNames) {
+            final String optionName = raw == null ? "" : raw.trim();
+            if (optionName.isEmpty()) {
+                throw new IllegalArgumentException("Every option must have a name.");
+            }
+            if (!seen.add(optionName.toLowerCase())) {
+                throw new IllegalArgumentException("Duplicate option name found ('" + optionName + "').");
+            }
+            options.add(new Option(optionName));
+        }
+        return options;
+    }
+
+    /** Builds the right Event subclass for the requested trading method, validating its settings. */
+    private Event buildEvent(final int id, final String name, final String description, final int commission,
+                             final CommissionType commissionType, final List<Option> options,
+                             final MarketMethodSpec method) {
+        if (method instanceof MarketMethodSpec.Lmsr lmsr) {
+            if (lmsr.b() <= 0) {
+                throw new IllegalArgumentException("LMSR 'b' must be a positive integer (got " + lmsr.b() + ").");
+            }
+            return new LmsrEvent(id, name, description, commission, commissionType, options, lmsr.b());
+        }
+        if (method instanceof MarketMethodSpec.OrderBook book) {
+            if (book.initial() < 0) {
+                throw new IllegalArgumentException("Order Book 'initial' must not be negative (got " + book.initial() + ").");
+            }
+            if (book.d() <= 0) {
+                throw new IllegalArgumentException("Order Book 'd' (base value) must be a positive integer (got " + book.d() + ").");
+            }
+            return new OrderBookEvent(id, name, description, commission, commissionType, options,
+                book.allowMint(), book.initial(), book.d());
+        }
+        throw new IllegalArgumentException("A trading method must be chosen.");
+    }
+
+    /** One above the highest id in use, so a created event can never collide with a loaded one. */
+    private int nextEventId() {
+        int highest = 0;
+        for (final Integer id : events.keySet()) {
+            highest = Math.max(highest, id);
+        }
+        return highest + 1;
     }
 
     @Override

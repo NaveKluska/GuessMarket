@@ -4,6 +4,7 @@ import guessmarket.dto.EventDetailsDTO;
 import guessmarket.dto.EventSummaryDTO;
 import guessmarket.dto.ReceiptDTO;
 import guessmarket.dto.UserSummaryDTO;
+import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.orderbook.OrderSide;
 
 import java.util.List;
@@ -91,6 +92,28 @@ public interface MarketEngine {
      * @throws Exception if the order cannot be submitted (wrong event type, not active, insufficient holdings to sell, etc.)
      */
     void submitOrder(String userName, int eventId, int optionIndex, OrderSide side, double price, int quantity) throws Exception;
+
+    /**
+     * Creates a brand-new event from scratch and makes the creating user its Market Maker.
+     * The event starts NOT_ACTIVE like any loaded one, so the creator still has to open it (and
+     * pay the subsidy or initial allocation) before trading can happen.
+     * <p>
+     * Inputs are validated to the same rules the file parser applies, so an event created here
+     * cannot be less valid than one loaded from XML.
+     *
+     * @param creatorName    the user creating the event, who becomes its Market Maker
+     * @param name           the event's display name
+     * @param description    the event's description
+     * @param commission     the commission percentage
+     * @param commissionType whether commission is taken on purchase or on close
+     * @param optionNames    the option names - exactly two, non-empty and distinct
+     * @param method         the trading method and its settings
+     * @return the id assigned to the new event
+     * @throws Exception if the creator is unknown or blocked, or any detail is invalid
+     */
+    int createEvent(String creatorName, String name, String description, int commission,
+                    CommissionType commissionType, List<String> optionNames,
+                    MarketMethodSpec method) throws Exception;
 
     /**
      * Saves the current system state to an external file.
