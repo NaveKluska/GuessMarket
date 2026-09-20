@@ -22,3 +22,8 @@ Thumbs.db
 
 # Scratch javac argfiles - regenerated on demand, contain absolute machine paths
 sources_*.txt
+
+# Tomcat runtime output - regenerated fresh every startup, not project state
+apache-tomcat-10.1.26/logs/
+apache-tomcat-10.1.26/temp/
+apache-tomcat-10.1.26/work/
