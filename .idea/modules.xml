@@ -3,10 +3,12 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/GuessMarket.iml" filepath="$PROJECT_DIR$/GuessMarket.iml" />
+      <module fileurl="file://$PROJECT_DIR$/guess-market-client/guess-market-client.iml" filepath="$PROJECT_DIR$/guess-market-client/guess-market-client.iml" />
       <module fileurl="file://$PROJECT_DIR$/guess-market-console/guess-market-console.iml" filepath="$PROJECT_DIR$/guess-market-console/guess-market-console.iml" />
       <module fileurl="file://$PROJECT_DIR$/guess-market-dto/guess-market-dto.iml" filepath="$PROJECT_DIR$/guess-market-dto/guess-market-dto.iml" />
       <module fileurl="file://$PROJECT_DIR$/guess-market-engine/guess-market-engine.iml" filepath="$PROJECT_DIR$/guess-market-engine/guess-market-engine.iml" />
       <module fileurl="file://$PROJECT_DIR$/guess-market-javafx/guess-market-javafx.iml" filepath="$PROJECT_DIR$/guess-market-javafx/guess-market-javafx.iml" />
+      <module fileurl="file://$PROJECT_DIR$/guess-market-server/guess-market-server.iml" filepath="$PROJECT_DIR$/guess-market-server/guess-market-server.iml" />
     </modules>
   </component>
 </project>
