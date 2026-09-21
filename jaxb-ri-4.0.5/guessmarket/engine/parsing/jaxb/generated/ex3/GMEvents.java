@@ -5,7 +5,7 @@
 //
 
 
-package guessmarket.engine.parsing.jaxb.generated.ex2;
+package guessmarket.engine.parsing.jaxb.generated.ex3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +26,7 @@ import jakarta.xml.bind.annotation.XmlType;
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
  *       <sequence>
- *         <element ref="{}GM-user" maxOccurs="unbounded"/>
+ *         <element ref="{}GM-event" maxOccurs="unbounded"/>
  *       </sequence>
  *     </restriction>
  *   </complexContent>
@@ -37,44 +37,44 @@ import jakarta.xml.bind.annotation.XmlType;
  */
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlType(name = "", propOrder = {
-    "gmUser"
+    "gmEvent"
 })
-@XmlRootElement(name = "GM-users")
-public class GMUsers {
+@XmlRootElement(name = "GM-events")
+public class GMEvents {
 
-    @XmlElement(name = "GM-user", required = true)
-    protected List<GMUser> gmUser;
+    @XmlElement(name = "GM-event", required = true)
+    protected List<GMEvent> gmEvent;
 
     /**
-     * Gets the value of the gmUser property.
+     * Gets the value of the gmEvent property.
      * 
      * <p>This accessor method returns a reference to the live list,
      * not a snapshot. Therefore any modification you make to the
      * returned list will be present inside the JAXB object.
-     * This is why there is not a <CODE>set</CODE> method for the gmUser property.</p>
+     * This is why there is not a <CODE>set</CODE> method for the gmEvent property.</p>
      * 
      * <p>
      * For example, to add a new item, do as follows:
      * </p>
      * <pre>
-     * getGMUser().add(newItem);
+     * getGMEvent().add(newItem);
      * </pre>
      * 
      * 
      * <p>
      * Objects of the following type(s) are allowed in the list
-     * {@link GMUser }
+     * {@link GMEvent }
      * </p>
      * 
      * 
      * @return
-     *     The value of the gmUser property.
+     *     The value of the gmEvent property.
      */
-    public List<GMUser> getGMUser() {
-        if (gmUser == null) {
-            gmUser = new ArrayList<>();
+    public List<GMEvent> getGMEvent() {
+        if (gmEvent == null) {
+            gmEvent = new ArrayList<>();
         }
-        return this.gmUser;
+        return this.gmEvent;
     }
 
 }

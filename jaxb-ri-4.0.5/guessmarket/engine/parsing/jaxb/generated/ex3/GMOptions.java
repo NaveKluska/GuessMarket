@@ -5,7 +5,7 @@
 //
 
 
-package guessmarket.engine.parsing.jaxb.generated.ex2;
+package guessmarket.engine.parsing.jaxb.generated.ex3;
 
 import java.util.ArrayList;
 import java.util.List;

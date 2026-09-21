@@ -5,11 +5,11 @@
 //
 
 
-package guessmarket.engine.parsing.jaxb.generated.ex2;
+package guessmarket.engine.parsing.jaxb.generated.ex3;
 
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
-import jakarta.xml.bind.annotation.XmlAttribute;
+import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import jakarta.xml.bind.annotation.XmlType;
 
@@ -23,7 +23,9 @@ import jakarta.xml.bind.annotation.XmlType;
  * <complexType>
  *   <complexContent>
  *     <restriction base="{http://www.w3.org/2001/XMLSchema}anyType">
- *       <attribute name="id" use="required" type="{http://www.w3.org/2001/XMLSchema}int" />
+ *       <sequence>
+ *         <element ref="{}GM-events"/>
+ *       </sequence>
  *     </restriction>
  *   </complexContent>
  * </complexType>
@@ -32,27 +34,37 @@ import jakarta.xml.bind.annotation.XmlType;
  * 
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "")
-@XmlRootElement(name = "event")
-public class Event {
+@XmlType(name = "", propOrder = {
+    "gmEvents"
+})
+@XmlRootElement(name = "Guess-Market")
+public class GuessMarket {
 
-    @XmlAttribute(name = "id", required = true)
-    protected int id;
+    @XmlElement(name = "GM-events", required = true)
+    protected GMEvents gmEvents;
 
     /**
-     * Gets the value of the id property.
+     * Gets the value of the gmEvents property.
      * 
+     * @return
+     *     possible object is
+     *     {@link GMEvents }
+     *     
      */
-    public int getId() {
-        return id;
+    public GMEvents getGMEvents() {
+        return gmEvents;
     }
 
     /**
-     * Sets the value of the id property.
+     * Sets the value of the gmEvents property.
      * 
+     * @param value
+     *     allowed object is
+     *     {@link GMEvents }
+     *     
      */
-    public void setId(int value) {
-        this.id = value;
+    public void setGMEvents(GMEvents value) {
+        this.gmEvents = value;
     }
 
 }
