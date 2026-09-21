@@ -1,3 +1,7 @@
+// Ex1's XPath-based parser. Superseded by Ex3's schema (no per-event `id` anymore -
+// events are identified by `name`), so this no longer compiles as-is.
+// Kept for reference rather than deleted; not compiled, not called from anywhere.
+/*
 package guessmarket.engine.parsing.impl.ex1;
 
 import guessmarket.engine.models.CommissionType;
@@ -161,3 +165,4 @@ public class EX1_XPath_XMLFileParser implements FileParser {
         return options;
     }
 }
+*/

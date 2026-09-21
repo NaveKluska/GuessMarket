@@ -6,7 +6,6 @@ import java.util.List;
 
 public class OrderBookEventDetailsDTO implements EventDetailsDTO
 {
-    private final int id;
     private final String name;
     private final String description;
     private final int commission;
@@ -20,9 +19,8 @@ public class OrderBookEventDetailsDTO implements EventDetailsDTO
     private final String winningOptionName;
     private final String marketMakerName;
 
-    public OrderBookEventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final String status, final double accountBalance, final int baseValue, final boolean allowMint, final List<OptionBookDTO> optionBooks, final List<ParticipantHoldingDTO> participants, final String winningOptionName, final String marketMakerName)
+    public OrderBookEventDetailsDTO(final String name, final String description, final int commission, final String commissionType, final String status, final double accountBalance, final int baseValue, final boolean allowMint, final List<OptionBookDTO> optionBooks, final List<ParticipantHoldingDTO> participants, final String winningOptionName, final String marketMakerName)
     {
-        this.id = id;
         this.name = name;
         this.description = description;
         this.commission = commission;
@@ -41,12 +39,6 @@ public class OrderBookEventDetailsDTO implements EventDetailsDTO
     public String getMarketMakerName()
     {
         return marketMakerName;
-    }
-
-    @Override
-    public int getId()
-    {
-        return id;
     }
 
     @Override

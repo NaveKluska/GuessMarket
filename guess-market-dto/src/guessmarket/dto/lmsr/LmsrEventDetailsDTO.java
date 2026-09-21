@@ -9,7 +9,6 @@ import java.util.Map;
 
 public class LmsrEventDetailsDTO implements EventDetailsDTO
 {
-    private final int id;
     private final String name;
     private final String description;
     private final int commission;
@@ -23,9 +22,8 @@ public class LmsrEventDetailsDTO implements EventDetailsDTO
     private final Map<String, Double> commissionPaidByUser;
     private final String marketMakerName;
 
-    public LmsrEventDetailsDTO(final int id, final String name, final String description, final int commission, final String commissionType, final String status, final double accountBalance, final double totalCommissionCollected, final List<OptionDTO> options, final List<TransactionDTO> transactions, final String winningOptionName, final Map<String, Double> commissionPaidByUser, final String marketMakerName)
+    public LmsrEventDetailsDTO(final String name, final String description, final int commission, final String commissionType, final String status, final double accountBalance, final double totalCommissionCollected, final List<OptionDTO> options, final List<TransactionDTO> transactions, final String winningOptionName, final Map<String, Double> commissionPaidByUser, final String marketMakerName)
     {
-        this.id = id;
         this.name = name;
         this.description = description;
         this.commission = commission;
@@ -44,12 +42,6 @@ public class LmsrEventDetailsDTO implements EventDetailsDTO
     public String getMarketMakerName()
     {
         return marketMakerName;
-    }
-
-    @Override
-    public int getId()
-    {
-        return id;
     }
 
     @Override

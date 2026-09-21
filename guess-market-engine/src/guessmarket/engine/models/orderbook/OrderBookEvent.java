@@ -20,10 +20,10 @@ public class OrderBookEvent extends Event {
     /** Gross amount a user has spent buying into each option (by index), never netted against sells - mirrors how commission is tracked. */
     private final Map<String, double[]> spentByUserPerOption = new HashMap<>();
 
-    public OrderBookEvent(int id, String name, String description, int commissionValue,
+    public OrderBookEvent(String name, String description, int commissionValue,
                           CommissionType commissionType, List<Option> options,
                           boolean allowMint, int initial, int d) {
-        super(id, name, description, commissionValue, commissionType, options);
+        super(name, description, commissionValue, commissionType, options);
         this.allowMint = allowMint;
         this.initial = initial;
         this.d = d;

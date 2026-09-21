@@ -81,7 +81,7 @@ public class MainController {
     private final List<UserSummaryDTO> allUsers = new ArrayList<>();
     /** Tracks which event's full detail+trade view is currently shown inline in the Users tab, so it survives a refresh. */
     private String selectedInlineUserName;
-    private Integer selectedInlineEventId;
+    private String selectedInlineEventId;
 
     @FXML
     private Label filePathLabel;
@@ -319,7 +319,7 @@ public class MainController {
                 setGraphic(null);
                 return;
             }
-            Label name = new Label(event.getId() + ". " + event.getName());
+            Label name = new Label(event.getName());
             name.getStyleClass().add("event-cell-name");
 
             HBox pills = new HBox(6, pill(readableType(event.getType()), typePillClass(event.getType())), pill(readableStatus(event.getStatus()), statusPillClass(event.getStatus())));
@@ -414,8 +414,8 @@ public class MainController {
             VBox singleEventBox = new VBox(10);
             boolean selectedEventStillListed = false;
             for (EventSummaryDTO event : allEvents) {
-                participationSection.body().getChildren().add(participationCard(user.getName(), event.getId(), singleEventBox));
-                if (event.getId() == (selectedInlineEventId != null ? selectedInlineEventId : -1)) {
+                participationSection.body().getChildren().add(participationCard(user.getName(), event.getName(), singleEventBox));
+                if (event.getName().equals(selectedInlineEventId)) {
                     selectedEventStillListed = true;
                 }
             }
@@ -531,7 +531,7 @@ public class MainController {
 
         // Do the creation inside an event filter so a rejection can consume the event and leave the
         // dialog open with everything the user typed still in place.
-        final int[] createdId = { -1 };
+        final String[] createdId = { null };
         Node okButton = dialog.getDialogPane().lookupButton(ButtonType.OK);
         okButton.addEventFilter(ActionEvent.ACTION, e -> {
             MarketMethodSpec method = "LMSR".equals(methodCombo.getValue())
@@ -549,7 +549,7 @@ public class MainController {
             }
         });
 
-        if (dialog.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK && createdId[0] > 0) {
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK && createdId[0] != null) {
             // Point the inline view at the new event BEFORE refreshing. refreshUsersList() reselects
             // the creator, which re-renders their details through the selection listener - so doing
             // this first means that single render already shows the new event, instead of drawing
@@ -790,7 +790,7 @@ public class MainController {
     }
 
     /** Renders the same full single-event detail+trade view used by the Events tab, inline within the Users tab, interactive as this user. */
-    private void populateSingleEventBox(int eventId, VBox box) {
+    private void populateSingleEventBox(String eventId, VBox box) {
         try {
             EventDetailsDTO details = engine.getEventDetails(eventId);
             Runnable onChange = () -> {
@@ -809,10 +809,10 @@ public class MainController {
         }
     }
 
-    private VBox participationCard(String userName, int eventId, VBox singleEventBox) {
+    private VBox participationCard(String userName, String eventId, VBox singleEventBox) {
         EventSummaryDTO summary = null;
         for (EventSummaryDTO e : allEvents) {
-            if (e.getId() == eventId) {
+            if (e.getName().equals(eventId)) {
                 summary = e;
                 break;
             }
@@ -917,8 +917,8 @@ public class MainController {
             return;
         }
         try {
-            EventDetailsDTO details = engine.getEventDetails(selected.getId());
-            Runnable onChange = () -> reloadAndShowEvent(selected.getId());
+            EventDetailsDTO details = engine.getEventDetails(selected.getName());
+            Runnable onChange = () -> reloadAndShowEvent(selected.getName());
             if (details instanceof LmsrEventDetailsDTO) {
                 eventDetailPane.getChildren().setAll(buildLmsrDetail((LmsrEventDetailsDTO) details, null, onChange));
             } else if (details instanceof OrderBookEventDetailsDTO) {
@@ -960,11 +960,11 @@ public class MainController {
 
         boolean isMm = viewingUserName != null && viewingUserName.equals(dto.getMarketMakerName());
         if (isMm && !"CLOSED".equals(dto.getStatus())) {
-            nodes.add(actionBar(dto.getId(), dto.getStatus(), optionNames, viewingUserName, onChange));
+            nodes.add(actionBar(dto.getName(), dto.getStatus(), optionNames, viewingUserName, onChange));
         }
 
         if (viewingUserName != null && "ACTIVE".equals(dto.getStatus())) {
-            nodes.add(interactiveLmsrCards(dto.getId(), dto.getOptions(), viewingUserName, onChange));
+            nodes.add(interactiveLmsrCards(dto.getName(), dto.getOptions(), viewingUserName, onChange));
         } else {
             FlowPane priceCards = new FlowPane(12, 10);
             priceCards.setAlignment(Pos.CENTER);
@@ -1012,7 +1012,7 @@ public class MainController {
     /** The two LMSR option cards, made clickable: pick a card to trade it, then a shared quantity
      * spinner and Buy button below act on whichever card is currently selected. Nothing is
      * pre-selected - the spinner and button stay disabled until the user picks an option. */
-    private VBox interactiveLmsrCards(int eventId, List<OptionDTO> options, String actingUserName, Runnable onChange) {
+    private VBox interactiveLmsrCards(String eventId, List<OptionDTO> options, String actingUserName, Runnable onChange) {
         List<VBox> cardNodes = new ArrayList<>();
         int[] selectedIndex = { -1 };
 
@@ -1088,7 +1088,7 @@ public class MainController {
 
         boolean isMm = viewingUserName != null && viewingUserName.equals(dto.getMarketMakerName());
         if (isMm && !"CLOSED".equals(dto.getStatus())) {
-            nodes.add(actionBar(dto.getId(), dto.getStatus(), optionNames, viewingUserName, onChange));
+            nodes.add(actionBar(dto.getName(), dto.getStatus(), optionNames, viewingUserName, onChange));
         }
 
         boolean active = "ACTIVE".equals(dto.getStatus());
@@ -1096,7 +1096,7 @@ public class MainController {
         books.setAlignment(Pos.CENTER);
         for (int i = 0; i < dto.getOptionBooks().size(); i++) {
             boolean isWinner = dto.getOptionBooks().get(i).getOptionName().equals(dto.getWinningOptionName());
-            books.getChildren().add(bookPanel(dto.getOptionBooks().get(i), dto.getId(), i, active, isWinner, viewingUserName, dto.getBaseValue(), onChange));
+            books.getChildren().add(bookPanel(dto.getOptionBooks().get(i), dto.getName(), i, active, isWinner, viewingUserName, dto.getBaseValue(), onChange));
         }
         nodes.add(books);
 
@@ -1176,7 +1176,7 @@ public class MainController {
         return nodes;
     }
 
-    private VBox bookPanel(OptionBookDTO book, int eventId, int optionIndex, boolean active, boolean isWinner, String actingUserName, double baseValue, Runnable onChange) {
+    private VBox bookPanel(OptionBookDTO book, String eventId, int optionIndex, boolean active, boolean isWinner, String actingUserName, double baseValue, Runnable onChange) {
         Label headerLabel = new Label(book.getOptionName());
         headerLabel.getStyleClass().add("book-panel-title");
         HBox header = isWinner ? new HBox(6, headerLabel, pill("WINNER", "pill-winner")) : new HBox(headerLabel);
@@ -1264,14 +1264,14 @@ public class MainController {
         }
     }
 
-    private void reloadAndShowEvent(int eventId) {
+    private void reloadAndShowEvent(String eventId) {
         try {
             allEvents.clear();
             allEvents.addAll(engine.getAllEvents());
             refreshEventList();
             refreshUsersList();
             for (EventSummaryDTO e : eventListView.getItems()) {
-                if (e.getId() == eventId) {
+                if (e.getName().equals(eventId)) {
                     eventListView.getSelectionModel().select(e);
                     return;
                 }
@@ -1311,7 +1311,7 @@ public class MainController {
         }
     }
 
-    private void showEventDetailsById(int eventId) {
+    private void showEventDetailsById(String eventId) {
         try {
             EventDetailsDTO details = engine.getEventDetails(eventId);
             Runnable onChange = () -> reloadAndShowEvent(eventId);
@@ -1326,7 +1326,7 @@ public class MainController {
     }
 
     /** actionBar only renders when there is something for actingUserName to do - callers gate on them being the MM. */
-    private FlowPane actionBar(int eventId, String status, List<String> optionNames, String actingUserName, Runnable onChange) {
+    private FlowPane actionBar(String eventId, String status, List<String> optionNames, String actingUserName, Runnable onChange) {
         FlowPane bar = new FlowPane(8, 6);
         bar.setAlignment(Pos.CENTER);
         bar.setPadding(new Insets(0, 0, 10, 0));
@@ -1348,7 +1348,7 @@ public class MainController {
         return bar;
     }
 
-    private FlowPane obTradeForm(int eventId, int optionIndex, String actingUserName, double baseValue, Runnable onChange) {
+    private FlowPane obTradeForm(String eventId, int optionIndex, String actingUserName, double baseValue, Runnable onChange) {
         ComboBox<String> sideCombo = new ComboBox<>();
         sideCombo.getItems().addAll("Buy", "Sell");
         sideCombo.getSelectionModel().selectFirst();

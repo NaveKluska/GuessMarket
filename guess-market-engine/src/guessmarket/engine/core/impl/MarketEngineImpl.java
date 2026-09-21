@@ -51,9 +51,9 @@ public class MarketEngineImpl implements MarketEngine
 {
     public static final double COST_OF_SHARE = 1.0;
     
-    private final Map<Integer, Event> events;
+    private final Map<String, Event> events;
     private final Map<String, User> users;
-    private final Map<Integer, String> eventMarketMakers;
+    private final Map<String, String> eventMarketMakers;
     private final FileParser parser;
     private final CommissionCalculator commissionCalculator;
     private boolean isDataLoaded;
@@ -74,26 +74,18 @@ public class MarketEngineImpl implements MarketEngine
         if (!isPathOnlyEnglishCharactersAndStandardSymbols(filePath)) {
             throw new IllegalArgumentException("Error: Only English characters and standard path symbols are allowed in the file path.");
         }
-        final guessmarket.engine.parsing.api.ParsedMarketData parsedData = parser.parse(filePath);
-        final List<Event> loadedEvents = parsedData.getEvents();
+        final List<Event> loadedEvents;
+        try (java.io.InputStream xml = java.nio.file.Files.newInputStream(java.nio.file.Path.of(filePath))) {
+            loadedEvents = parser.parse(xml);
+        }
         this.events.clear();
         for (final Event event : loadedEvents) {
-            this.events.put(event.getId(), event);
+            this.events.put(event.getName(), event);
         }
 
-        final List<User> loadedUsers = parsedData.getUsers();
+        // The parser only ever returns events now - Ex3's schema has no GM-users at all.
         this.users.clear();
         this.eventMarketMakers.clear();
-        if (loadedUsers != null) {
-            for (final User user : loadedUsers) {
-                this.users.put(user.getName(), user);
-                if (user.getMarketMakerForEvents() != null) {
-                    for (final Integer mmEventId : user.getMarketMakerForEvents()) {
-                        this.eventMarketMakers.put(mmEventId, user.getName());
-                    }
-                }
-            }
-        }
 
         this.isDataLoaded = true;
     }
@@ -136,15 +128,15 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     @Override
-    public EventDetailsDTO getEventDetails(final int eventId)
+    public EventDetailsDTO getEventDetails(final String eventName)
     {
         if (!isDataLoaded) {
             throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
         }
 
-        final Event event = this.events.get(eventId);
+        final Event event = this.events.get(eventName);
         if (event == null) {
-            throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
+            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
         }
         return mapToDetailsDTO(event);
     }
@@ -158,15 +150,15 @@ public class MarketEngineImpl implements MarketEngine
 
         final List<UserSummaryDTO> result = new ArrayList<>();
         for (final User user : this.users.values()) {
-            final List<Integer> relevantEventIds = new ArrayList<>();
+            final List<String> relevantEventNames = new ArrayList<>();
             for (final Event event : this.events.values()) {
-                final boolean isOwner = user.getName().equals(eventMarketMakers.get(event.getId()));
+                final boolean isOwner = user.getName().equals(eventMarketMakers.get(event.getName()));
                 if (isOwner || isParticipant(user.getName(), event)) {
-                    relevantEventIds.add(event.getId());
+                    relevantEventNames.add(event.getName());
                 }
             }
             final boolean isMarketMaker = user.getMarketMakerForEvents() != null && !user.getMarketMakerForEvents().isEmpty();
-            result.add(new UserSummaryDTO(user.getName(), user.getBalance(), user.isBlocked(), isMarketMaker, relevantEventIds, balanceHistoryOf(user)));
+            result.add(new UserSummaryDTO(user.getName(), user.getBalance(), user.isBlocked(), isMarketMaker, relevantEventNames, balanceHistoryOf(user)));
         }
         return result;
     }
@@ -185,7 +177,7 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     @Override
-    public ReceiptDTO buyShares(final String memberName, final int eventId, final int optionIndex, final int quantity) throws Exception
+    public ReceiptDTO buyShares(final String memberName, final String eventName, final int optionIndex, final int quantity) throws Exception
     {
         if (!isDataLoaded) {
             throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
@@ -195,13 +187,13 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalArgumentException("Quantity must be positive.");
         }
 
-        final Event event = events.get(eventId);
+        final Event event = events.get(eventName);
         if (event == null) {
-            throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
+            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
         }
 
         if (event.getStatus() != EventStatus.ACTIVE) {
-            throw new IllegalArgumentException("Cannot trade on Event " + eventId + " because it is not active (current status: " + event.getStatus() + ").");
+            throw new IllegalArgumentException("Cannot trade on Event '" + eventName + "' because it is not active (current status: " + event.getStatus() + ").");
         }
 
         if (optionIndex < 0 || optionIndex >= event.getOptions().size()) {
@@ -231,7 +223,7 @@ public class MarketEngineImpl implements MarketEngine
 
         if (commission > 0) {
             event.recordCommissionPaid(memberName, commission);
-            final User mm = users.get(eventMarketMakers.get(eventId));
+            final User mm = users.get(eventMarketMakers.get(eventName));
             if (mm != null) {
                 mm.increaseBalance(commission);
             }
@@ -241,7 +233,7 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     @Override
-    public void submitOrder(final String userName, final int eventId, final int optionIndex, final OrderSide side, final double price, final int quantity) throws Exception
+    public void submitOrder(final String userName, final String eventName, final int optionIndex, final OrderSide side, final double price, final int quantity) throws Exception
     {
         if (!isDataLoaded) {
             throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
@@ -250,15 +242,15 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalArgumentException("Quantity must be positive.");
         }
 
-        final Event event = events.get(eventId);
+        final Event event = events.get(eventName);
         if (event == null) {
-            throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
+            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
         }
         if (!(event instanceof OrderBookEvent)) {
-            throw new IllegalArgumentException("Event " + eventId + " is not an Order Book event.");
+            throw new IllegalArgumentException("Event '" + eventName + "' is not an Order Book event.");
         }
         if (event.getStatus() != EventStatus.ACTIVE) {
-            throw new IllegalArgumentException("Cannot trade on Event " + eventId + " because it is not active (current status: " + event.getStatus() + ").");
+            throw new IllegalArgumentException("Cannot trade on Event '" + eventName + "' because it is not active (current status: " + event.getStatus() + ").");
         }
         if (optionIndex < 0 || optionIndex >= event.getOptions().size()) {
             throw new IllegalArgumentException("Invalid option selection.");
@@ -372,7 +364,7 @@ public class MarketEngineImpl implements MarketEngine
 
     private void creditCommissionToMm(final OrderBookEvent obEvent, final double commission) {
         if (commission > 0) {
-            final User mm = users.get(eventMarketMakers.get(obEvent.getId()));
+            final User mm = users.get(eventMarketMakers.get(obEvent.getName()));
             if (mm != null) {
                 mm.increaseBalance(commission);
                 // The ledger behind getProfitOrLoss() already counts every cent the Market Maker
@@ -385,30 +377,30 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     @Override
-    public void openEvent(final String mmName, final int eventId) throws Exception
+    public void openEvent(final String mmName, final String eventName) throws Exception
     {
         if (!isDataLoaded) {
             throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
         }
 
-        final Event event = events.get(eventId);
+        final Event event = events.get(eventName);
         if (event == null) {
-            throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
+            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
         }
 
-        final User mm = requireAssignedMarketMaker(mmName, eventId);
+        final User mm = requireAssignedMarketMaker(mmName, eventName);
 
         if (event.getStatus() != EventStatus.NOT_ACTIVE) {
-            throw new IllegalArgumentException("Event " + eventId + " cannot be opened (current status: " + event.getStatus() + ").");
+            throw new IllegalArgumentException("Event '" + eventName + "' cannot be opened (current status: " + event.getStatus() + ").");
         }
         if (mm.isBlocked()) {
-            throw new IllegalArgumentException("Event " + eventId + " cannot be opened because Market Maker '" + mmName + "' has a negative balance and cannot cover the cost of subsidizing it.");
+            throw new IllegalArgumentException("Event '" + eventName + "' cannot be opened because Market Maker '" + mmName + "' has a negative balance and cannot cover the cost of subsidizing it.");
         }
 
         if (event instanceof LmsrEvent) {
             final double subsidy = ((LmsrEvent) event).calculateInitialSubsidy();
             if (mm.getBalance() < subsidy) {
-                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + Amounts.format(mm.getBalance()) + ") to open Event " + eventId + " (requires a subsidy of " + Amounts.format(subsidy) + ").");
+                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + Amounts.format(mm.getBalance()) + ") to open Event '" + eventName + "' (requires a subsidy of " + Amounts.format(subsidy) + ").");
             }
             mm.decreaseBalance(subsidy);
             event.increaseAccountBalance(subsidy);
@@ -418,7 +410,7 @@ public class MarketEngineImpl implements MarketEngine
             final OrderBookEvent obEvent = (OrderBookEvent) event;
             final double cost = obEvent.getInitial() * (double) obEvent.getD();
             if (mm.getBalance() < cost) {
-                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + Amounts.format(mm.getBalance()) + ") to open Event " + eventId + " (requires " + Amounts.format(cost) + ").");
+                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + Amounts.format(mm.getBalance()) + ") to open Event '" + eventName + "' (requires " + Amounts.format(cost) + ").");
             }
             mm.decreaseBalance(cost);
             event.increaseAccountBalance(cost);
@@ -436,21 +428,21 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     @Override
-    public void closeEvent(final String mmName, final int eventId, final int winningOptionIndex) throws Exception
+    public void closeEvent(final String mmName, final String eventName, final int winningOptionIndex) throws Exception
     {
         if (!isDataLoaded) {
             throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
         }
 
-        final Event event = events.get(eventId);
+        final Event event = events.get(eventName);
         if (event == null) {
-            throw new IllegalArgumentException("Event with ID " + eventId + " does not exist.");
+            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
         }
 
-        final User mm = requireAssignedMarketMaker(mmName, eventId);
+        final User mm = requireAssignedMarketMaker(mmName, eventName);
 
         if (event.getStatus() != EventStatus.ACTIVE) {
-            throw new IllegalArgumentException("Event " + eventId + " cannot be closed (current status: " + event.getStatus() + ").");
+            throw new IllegalArgumentException("Event '" + eventName + "' cannot be closed (current status: " + event.getStatus() + ").");
         }
         // Deliberately no isBlocked() check here, unlike opening an event or trading: closing is
         // how a blocked MM's event gets resolved and everyone's money paid out. Blocking a market
@@ -526,10 +518,10 @@ public class MarketEngineImpl implements MarketEngine
         }
     }
 
-    private User requireAssignedMarketMaker(final String mmName, final int eventId) {
-        final String assignedMm = eventMarketMakers.get(eventId);
+    private User requireAssignedMarketMaker(final String mmName, final String eventName) {
+        final String assignedMm = eventMarketMakers.get(eventName);
         if (assignedMm == null || !assignedMm.equals(mmName)) {
-            throw new IllegalArgumentException("User '" + mmName + "' is not the Market Maker for Event " + eventId + ".");
+            throw new IllegalArgumentException("User '" + mmName + "' is not the Market Maker for Event '" + eventName + "'.");
         }
         final User mm = users.get(mmName);
         if (mm == null) {
@@ -539,7 +531,7 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     @Override
-    public int createEvent(final String creatorName, final String name, final String description,
+    public String createEvent(final String creatorName, final String name, final String description,
                            final int commission, final CommissionType commissionType,
                            final List<String> optionNames, final MarketMethodSpec method) throws Exception
     {
@@ -559,6 +551,9 @@ public class MarketEngineImpl implements MarketEngine
         if (cleanName.isEmpty()) {
             throw new IllegalArgumentException("Event name cannot be empty.");
         }
+        if (events.containsKey(cleanName)) {
+            throw new IllegalArgumentException("An event named '" + cleanName + "' already exists.");
+        }
         final String cleanDescription = description == null ? "" : description.trim();
         if (cleanDescription.isEmpty()) {
             throw new IllegalArgumentException("Event description cannot be empty.");
@@ -574,12 +569,12 @@ public class MarketEngineImpl implements MarketEngine
         }
 
         final List<Option> options = buildOptions(optionNames);
-        final Event created = buildEvent(nextEventId(), cleanName, cleanDescription, commission, commissionType, options, method);
+        final Event created = buildEvent(cleanName, cleanDescription, commission, commissionType, options, method);
 
-        events.put(created.getId(), created);
-        eventMarketMakers.put(created.getId(), creatorName);
-        creator.addMarketMakerEvent(created.getId());
-        return created.getId();
+        events.put(created.getName(), created);
+        eventMarketMakers.put(created.getName(), creatorName);
+        creator.addMarketMakerEvent(created.getName());
+        return created.getName();
     }
 
     /** Validates and builds the option list, applying the parser's rules: exactly two, named, distinct. */
@@ -603,14 +598,14 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     /** Builds the right Event subclass for the requested trading method, validating its settings. */
-    private Event buildEvent(final int id, final String name, final String description, final int commission,
+    private Event buildEvent(final String name, final String description, final int commission,
                              final CommissionType commissionType, final List<Option> options,
                              final MarketMethodSpec method) {
         if (method instanceof MarketMethodSpec.Lmsr lmsr) {
             if (lmsr.b() <= 0) {
                 throw new IllegalArgumentException("LMSR 'b' must be a positive integer (got " + lmsr.b() + ").");
             }
-            return new LmsrEvent(id, name, description, commission, commissionType, options, lmsr.b());
+            return new LmsrEvent(name, description, commission, commissionType, options, lmsr.b());
         }
         if (method instanceof MarketMethodSpec.OrderBook book) {
             if (book.initial() < 0) {
@@ -619,19 +614,10 @@ public class MarketEngineImpl implements MarketEngine
             if (book.d() <= 0) {
                 throw new IllegalArgumentException("Order Book 'd' (base value) must be a positive integer (got " + book.d() + ").");
             }
-            return new OrderBookEvent(id, name, description, commission, commissionType, options,
+            return new OrderBookEvent(name, description, commission, commissionType, options,
                 book.allowMint(), book.initial(), book.d());
         }
         throw new IllegalArgumentException("A trading method must be chosen.");
-    }
-
-    /** One above the highest id in use, so a created event can never collide with a loaded one. */
-    private int nextEventId() {
-        int highest = 0;
-        for (final Integer id : events.keySet()) {
-            highest = Math.max(highest, id);
-        }
-        return highest + 1;
     }
 
     @Override
@@ -657,7 +643,7 @@ public class MarketEngineImpl implements MarketEngine
             throw new IllegalArgumentException("Error: Only English characters and standard path symbols are allowed in the file path.");
         }
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filePath + ".dat"))) {
-            Map<Integer, Event> loaded = (Map<Integer, Event>) ois.readObject();
+            Map<String, Event> loaded = (Map<String, Event>) ois.readObject();
             events.clear();
             events.putAll(loaded);
             this.isDataLoaded = true;
@@ -679,7 +665,6 @@ public class MarketEngineImpl implements MarketEngine
         }
 
         return new EventSummaryDTO(
-            event.getId(),
             event.getName(),
             event.getDescription(),
             event.getCommission(),
@@ -687,7 +672,7 @@ public class MarketEngineImpl implements MarketEngine
             optionNames,
             event.getStatus().name(),
             (event instanceof LmsrEvent) ? "LMSR" : "ORDER_BOOK",
-            eventMarketMakers.get(event.getId()),
+            eventMarketMakers.get(event.getName()),
             event.getAccountBalance()
         );
     }
@@ -715,10 +700,10 @@ public class MarketEngineImpl implements MarketEngine
         }
 
         return new LmsrEventDetailsDTO(
-            event.getId(), event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
+            event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
             event.getStatus().name(), event.getAccountBalance(), event.getTotalCommissionCollected(),
             optionDTOs, transactionDTOs, event.getWinningOptionName(), event.getCommissionPaidByUserMap(),
-            eventMarketMakers.get(event.getId())
+            eventMarketMakers.get(event.getName())
         );
     }
 
@@ -753,10 +738,10 @@ public class MarketEngineImpl implements MarketEngine
         }
 
         return new OrderBookEventDetailsDTO(
-            event.getId(), event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
+            event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
             event.getStatus().name(), event.getAccountBalance(), event.getD(), event.isAllowMint(),
             optionBooks, participants, event.getWinningOptionName(),
-            eventMarketMakers.get(event.getId())
+            eventMarketMakers.get(event.getName())
         );
     }
 

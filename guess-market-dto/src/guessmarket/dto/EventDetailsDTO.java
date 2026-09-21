@@ -8,8 +8,6 @@ package guessmarket.dto;
  */
 public interface EventDetailsDTO
 {
-    int getId();
-
     String getName();
 
     String getDescription();

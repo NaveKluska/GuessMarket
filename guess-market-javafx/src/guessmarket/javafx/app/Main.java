@@ -1,3 +1,9 @@
+// Ex2's desktop launcher - constructed the engine directly with EX2_JAXB_XMLFileParser,
+// which is now commented out (Ex3's schema dropped per-event `id` and `GM-users`).
+// Superseded by Ex3's own client entry point in guess-market-client, which talks to
+// the server over HTTP instead of building a MarketEngine locally.
+// Kept for reference rather than deleted; not compiled, not called from anywhere.
+/*
 package guessmarket.javafx.app;
 
 import guessmarket.engine.billing.impl.StandardCommissionCalculator;
@@ -43,3 +49,4 @@ public class Main extends Application {
         launch(args);
     }
 }
+*/

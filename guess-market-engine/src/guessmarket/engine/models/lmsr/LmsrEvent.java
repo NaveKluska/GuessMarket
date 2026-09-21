@@ -10,8 +10,8 @@ public class LmsrEvent extends Event {
     private static final long serialVersionUID = 1L;
     private final int b;
 
-    public LmsrEvent(int id, String name, String description, int commission, CommissionType commissionType, List<Option> options, int b) {
-        super(id, name, description, commission, commissionType, options);
+    public LmsrEvent(String name, String description, int commission, CommissionType commissionType, List<Option> options, int b) {
+        super(name, description, commission, commissionType, options);
         this.b = b;
         this.accountBalance = 0.0;
     }

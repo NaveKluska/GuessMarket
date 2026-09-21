@@ -15,7 +15,6 @@ public abstract class Event implements Serializable
     public static final int COMMISSION_VALUE_MAX = 90;
 
     private static final long serialVersionUID = 1L;
-    private final int id;
     private String name;
     private String description;
     private int commission;
@@ -29,9 +28,8 @@ public abstract class Event implements Serializable
     private final Set<String> participants = new HashSet<>();
     private final Map<String, Double> commissionPaidByUser = new HashMap<>();
 
-    public Event(int id, String name, String description, int commission, CommissionType commissionType, List<Option> options)
+    public Event(String name, String description, int commission, CommissionType commissionType, List<Option> options)
     {
-        this.id = id;
         this.name = name;
         this.description = description;
         this.commission = commission;
@@ -41,11 +39,6 @@ public abstract class Event implements Serializable
         this.accountBalance = 0.0;
         this.totalCommissionCollected = 0.0;
         this.transactions = new ArrayList<>();
-    }
-
-    public int getId()
-    {
-        return id;
     }
 
     public String getName()

@@ -1,3 +1,7 @@
+// Ex1's DOM-based parser. Superseded by Ex3's schema (no per-event `id` anymore -
+// events are identified by `name`), so this no longer compiles as-is.
+// Kept for reference rather than deleted; not compiled, not called from anywhere.
+/*
 package guessmarket.engine.parsing.impl.ex1;
 
 import guessmarket.engine.models.CommissionType;
@@ -38,12 +42,12 @@ public class EX1_DOM_XMLFileParser implements FileParser {
         Document document = getDocument(filePath);
 
         List<Event> parsedEvents = getParsedEvents(document);
-        
+
         return new ParsedMarketData(parsedEvents, Collections.emptyList());
     }
 
     private Document getDocument(String filePath) throws Exception {
-        
+
         if (!filePath.toLowerCase().endsWith(".xml")) {
             throw new IllegalArgumentException("Error: File at " + filePath + " must end with .xml");
         }
@@ -57,16 +61,16 @@ public class EX1_DOM_XMLFileParser implements FileParser {
         DocumentBuilder builder = factory.newDocumentBuilder();
         Document document = builder.parse(xmlFile);
         document.getDocumentElement().normalize();
-        
+
         return document;
     }
-        
+
     private List<Event> getParsedEvents(Document document) {
         Element root = document.getDocumentElement();
         if (!root.getNodeName().equals("Guess-Market")) {
             throw new IllegalArgumentException("Error: Root element must be 'Guess-Market'!");
         }
-        
+
         List<Element> eventsNodes = getChildElementsByTagName(root, "GM-events");
         if (eventsNodes.size() != 1) {
             throw new IllegalArgumentException("Error: XML must contain exactly one 'GM-events' element!");
@@ -74,7 +78,7 @@ public class EX1_DOM_XMLFileParser implements FileParser {
 
         List<Event> parsedEvents = new ArrayList<>();
         Set<Integer> parsedIds = new HashSet<>();
-        
+
         List<Element> eventNodes = getChildElementsByTagName(eventsNodes.get(0), "GM-event");
         if (eventNodes.isEmpty()) {
             throw new IllegalArgumentException("Error: File must contain at least one GM-event!");
@@ -83,11 +87,11 @@ public class EX1_DOM_XMLFileParser implements FileParser {
         for (int i = 0; i < eventNodes.size(); i++) {
             Element eventElement = eventNodes.get(i);
             Event parsedEvent = parseEvent(eventElement, i + 1);
-            
+
             if (!parsedIds.add(parsedEvent.getId())) {
                 throw new IllegalArgumentException("Error in Event at position " + (i + 1) + ": Duplicate Event ID found (" + parsedEvent.getId() + ")!");
             }
-            
+
             parsedEvents.add(parsedEvent);
         }
         return parsedEvents;
@@ -115,7 +119,7 @@ public class EX1_DOM_XMLFileParser implements FileParser {
         }
         return name;
     }
-    
+
     private int parseId(Element eventElement, int eventIndex) {
         List<Element> idNodes = getChildElementsByTagName(eventElement, "id");
         if (idNodes.size() != 1) {
@@ -150,7 +154,7 @@ public class EX1_DOM_XMLFileParser implements FileParser {
             throw new IllegalArgumentException("Error in Event " + eventId + ": Event must have exactly one commission!");
         }
         Element commissionElement = commissionNodes.get(0);
-        
+
         String textContent = commissionElement.getTextContent().trim();
         if (textContent.isEmpty()) {
             throw new IllegalArgumentException("Error in Event " + eventId + ": Commission must have a value!");
@@ -172,7 +176,7 @@ public class EX1_DOM_XMLFileParser implements FileParser {
             throw new IllegalArgumentException("Error in Event " + eventId + ": Event must have exactly one commission!");
         }
         Element commissionElement = commissionNodes.get(0);
-        
+
         if (!commissionElement.hasAttribute("type")) {
             throw new IllegalArgumentException("Error in Event " + eventId + ": Commission must have a type attribute!");
         }
@@ -192,19 +196,19 @@ public class EX1_DOM_XMLFileParser implements FileParser {
             throw new IllegalArgumentException("Error in Event " + eventId + ": Event must have exactly one GM-method element!");
         }
         Element methodElement = methodNodes.get(0);
-        
+
         List<Element> lmsrNodes = getChildElementsByTagName(methodElement, "GM-LMSR");
         if (lmsrNodes.size() != 1) {
             throw new IllegalArgumentException("Error in Event " + eventId + ": GM-method must contain exactly one GM-LMSR element!");
         }
         Element lmsrElement = lmsrNodes.get(0);
-        
+
         List<Element> bNodes = getChildElementsByTagName(lmsrElement, "b");
         if (bNodes.size() != 1) {
             throw new IllegalArgumentException("Error in Event " + eventId + ": GM-LMSR must have exactly one 'b' element!");
         }
         Element bElement = bNodes.get(0);
-        
+
         try {
             int parsedB = Integer.parseInt(bElement.getTextContent().trim());
             if (parsedB <= 0) {
@@ -222,17 +226,17 @@ public class EX1_DOM_XMLFileParser implements FileParser {
             throw new IllegalArgumentException("Error in Event " + eventId + ": Event must have exactly one GM-options element!");
         }
         Element optionsElement = optionsNodes.get(0);
-        
+
         List<Element> optionNodes = getChildElementsByTagName(optionsElement, "GM-option");
         if (optionNodes.size() != 2) {
             throw new IllegalArgumentException("Error in Event " + eventId + ": GM-options must have exactly two GM-option elements!");
         }
-        
+
         List<Option> options = new ArrayList<>();
         Set<String> optionNames = new HashSet<>();
         for (int i = 0; i < optionNodes.size(); i++) {
             Element optionNode = optionNodes.get(i);
-            
+
             String optionName = optionNode.getTextContent().trim();
             if (optionName.isEmpty()) {
                 throw new IllegalArgumentException("Error in Event " + eventId + ": GM-option must have a name!");
@@ -242,7 +246,7 @@ public class EX1_DOM_XMLFileParser implements FileParser {
             }
             options.add(new Option(optionName));
         }
-        
+
         return options;
     }
 
@@ -258,3 +262,4 @@ public class EX1_DOM_XMLFileParser implements FileParser {
         return elements;
     }
 }
+*/

@@ -4,7 +4,6 @@ import java.util.List;
 
 public class EventSummaryDTO
 {
-    private final int id;
     private final String name;
     private final String description;
     private final int commission;
@@ -15,9 +14,8 @@ public class EventSummaryDTO
     private final String marketMakerName;
     private final double accountBalance;
 
-    public EventSummaryDTO(final int id, final String name, final String description, final int commission, final String commissionType, final List<String> options, final String status, final String type, final String marketMakerName, final double accountBalance)
+    public EventSummaryDTO(final String name, final String description, final int commission, final String commissionType, final List<String> options, final String status, final String type, final String marketMakerName, final double accountBalance)
     {
-        this.id = id;
         this.name = name;
         this.description = description;
         this.commission = commission;
@@ -37,11 +35,6 @@ public class EventSummaryDTO
     public String getMarketMakerName()
     {
         return marketMakerName;
-    }
-
-    public int getId()
-    {
-        return id;
     }
 
     public String getName()

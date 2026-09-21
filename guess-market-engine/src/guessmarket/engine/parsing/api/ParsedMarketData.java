@@ -1,3 +1,7 @@
+// Was FileParser's return type when it bundled events + users. Ex3's parser only ever returns
+// events (no GM-users in that schema), so FileParser.parse() returns List<Event> directly now.
+// Kept for reference rather than deleted; not compiled, not called from anywhere.
+/*
 package guessmarket.engine.parsing.api;
 
 import guessmarket.engine.models.Event;
@@ -21,3 +25,4 @@ public class ParsedMarketData {
         return users;
     }
 }
+*/

@@ -1,3 +1,7 @@
+// Ex1's JAXB-based parser. Superseded by Ex3's schema (no per-event `id` anymore -
+// events are identified by `name`), so this no longer compiles as-is.
+// Kept for reference rather than deleted; not compiled, not called from anywhere.
+/*
 package guessmarket.engine.parsing.impl.ex1;
 
 import guessmarket.engine.models.CommissionType;
@@ -92,15 +96,15 @@ public class EX1_JAXB_XMLFileParser implements FileParser {
         if (name.isEmpty()) {
             throw new IllegalArgumentException("Error in Event " + id + ": Event name cannot be empty!");
         }
-        
+
         String description = gmEvent.getDescription() != null ? gmEvent.getDescription().trim() : "";
         if (description.isEmpty()) {
             throw new IllegalArgumentException("Error in Event " + id + ": Event description cannot be empty!");
         }
-        
+
         int commissionValue = parseCommissionValue(gmEvent.getComision(), id);
         CommissionType commissionType = parseCommissionType(gmEvent.getComision(), id);
-        
+
         List<Option> options = parseOptions(gmEvent, id);
         int b = parseLMSRbValue(gmEvent, id);
 
@@ -169,3 +173,4 @@ public class EX1_JAXB_XMLFileParser implements FileParser {
         return options;
     }
 }
+*/

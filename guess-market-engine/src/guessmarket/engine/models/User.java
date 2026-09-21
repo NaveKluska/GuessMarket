@@ -10,7 +10,7 @@ public class User {
     private double initialCash;
     private boolean blocked;
 
-    private final List<Integer> marketMakerForEvents;
+    private final List<String> marketMakerForEvents;
 
     /**
      * Every value this user's balance has held, oldest first, for plotting their account over time.
@@ -20,7 +20,7 @@ public class User {
      */
     private final List<BalancePoint> balanceHistory = new ArrayList<>();
 
-    public User(String name, double initialCash, List<Integer> marketMakerForEvents) {
+    public User(String name, double initialCash, List<String> marketMakerForEvents) {
         this.name = name;
         this.initialCash = initialCash;
         this.blocked = false;
@@ -69,7 +69,7 @@ public class User {
         recordBalance();
     }
 
-    public List<Integer> getMarketMakerForEvents() {
+    public List<String> getMarketMakerForEvents() {
         return marketMakerForEvents;
     }
 
@@ -77,9 +77,9 @@ public class User {
      * Records that this user is now the Market Maker of another event - used when a user creates
      * an event at runtime, so their role there matches one assigned in the loaded file.
      */
-    public void addMarketMakerEvent(final int eventId) {
-        if (!marketMakerForEvents.contains(eventId)) {
-            marketMakerForEvents.add(eventId);
+    public void addMarketMakerEvent(final String eventName) {
+        if (!marketMakerForEvents.contains(eventName)) {
+            marketMakerForEvents.add(eventName);
         }
     }
 
