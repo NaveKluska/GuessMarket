@@ -63,12 +63,10 @@ public class OrderBook
             }
 
             final int fillQuantity = Math.min(incoming.getQuantity(), resting.getQuantity());
-            // TRADE PRICE ASSUMPTION - CONFIRM WITH PROFESSOR:
-            // We always execute at the RESTING order's price, whether resting is a buy or a sell.
-            // Rationale: the resting order already locked in its price; the incoming order's price
-            // only decides whether a trade happens at all (see priceCrosses), never what price it
-            // happens at. This is the standard "maker's price" convention, but the PDF doesn't say
-            // this explicitly - worth double-checking this assumption is what's expected.
+            // Confirmed with the professor: we always execute at the RESTING order's price,
+            // whether resting is a buy or a sell - the resting order already locked in its price;
+            // the incoming order's price only decides whether a trade happens at all (see
+            // priceCrosses), never what price it happens at. The standard "maker's price" convention.
             fills.add(new Fill(resting, incoming, fillQuantity, resting.getPrice()));
             incoming.reduceQuantity(fillQuantity);
             resting.reduceQuantity(fillQuantity);
@@ -170,13 +168,14 @@ public class OrderBook
         return byPrice.thenComparingLong(Order::getSequence);
     }
 
+    /** A defensive copy, not the live book - callers should never be able to corrupt the resting orders by mutating what they get back. */
     public List<Order> getBuyOrders()
     {
-        return buyOrders;
+        return new ArrayList<>(buyOrders);
     }
 
     public List<Order> getSellOrders()
     {
-        return sellOrders;
+        return new ArrayList<>(sellOrders);
     }
 }

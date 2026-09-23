@@ -3,11 +3,17 @@ package guessmarket.engine.models.lmsr;
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
 import guessmarket.engine.models.Option;
+import guessmarket.engine.models.Transaction;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class LmsrEvent extends Event {
     private static final long serialVersionUID = 1L;
+    /** What a share of the winning option pays out at close, per share bought - always $1. */
+    private static final double PAYOUT_PER_WINNING_SHARE = 1.0;
+
     private final int b;
 
     public LmsrEvent(String name, String description, int commission, CommissionType commissionType, List<Option> options, int b) {
@@ -16,12 +22,36 @@ public class LmsrEvent extends Event {
         this.accountBalance = 0.0;
     }
 
-    public int getB() {
-        return b;
-    }
-
     public double calculateInitialSubsidy() {
         return b * Math.log(getOptions().size());
+    }
+
+    @Override
+    public double calculateOpeningCost() {
+        return calculateInitialSubsidy();
+    }
+
+    @Override
+    public String openingCostLabel() {
+        return "subsidy";
+    }
+
+    @Override
+    public void applyOpening(final String mmName, final double amountPaid) {
+        increaseAccountBalance(amountPaid);
+        addParticipant(mmName);
+    }
+
+    @Override
+    public List<Map.Entry<String, Double>> winningPayouts(final int winningOptionIndex) {
+        final List<Map.Entry<String, Double>> payouts = new ArrayList<>();
+        final Option winningOption = getOptions().get(winningOptionIndex);
+        for (final Transaction transaction : getTransactions()) {
+            if (transaction.getOptionName().equals(winningOption.getName())) {
+                payouts.add(Map.entry(transaction.getUserName(), transaction.getQuantity() * PAYOUT_PER_WINNING_SHARE));
+            }
+        }
+        return payouts;
     }
 
     @Override

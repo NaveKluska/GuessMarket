@@ -10,7 +10,6 @@ import java.util.Set;
 
 public abstract class Event implements Serializable
 {
-    /** Commission bounds every event must satisfy, however it came into being - parsed or created at runtime. */
     public static final int COMMISSION_VALUE_MIN = 0;
     public static final int COMMISSION_VALUE_MAX = 90;
 
@@ -85,8 +84,33 @@ public abstract class Event implements Serializable
     }
 
     public abstract double getOptionProbability(int optionIndex);
-    
+
     public abstract double calculateCost(int optionIndex, int quantity);
+
+    /** The cost the Market Maker must pay to open this event - an LMSR subsidy, or the cost of the initial share allocation. */
+    public abstract double calculateOpeningCost();
+
+    /** The short label naming that cost in the account ledger, e.g. "subsidy" or "initial stock". */
+    public abstract String openingCostLabel();
+
+    /** Applies opening to this event's own state, once the Market Maker's payment has already been taken. */
+    public abstract void applyOpening(String mmName, double amountPaid);
+
+    /**
+     * Every winning holder's payout for this option, before commission - as a list rather than a
+     * map, because LMSR can genuinely owe the same user more than one separate payout (one per
+     * winning transaction), and collapsing those into a single summed entry would change which
+     * amount commission gets calculated on.
+     */
+    public abstract List<Map.Entry<String, Double>> winningPayouts(int winningOptionIndex);
+
+    /**
+     * Records that this user received this amount as money paid out by the event (a payout, a
+     * commission, leftover funds swept back). No-op by default - only Order Book events keep a
+     * profit/loss ledger to feed; LMSR events have nothing to record here.
+     */
+    public void recordPayoutReceived(String userName, double amount) {
+    }
 
     public double getAccountBalance()
     {
@@ -98,9 +122,10 @@ public abstract class Event implements Serializable
         return totalCommissionCollected;
     }
 
+    /** A defensive copy - safe to iterate even while a concurrent trade on this event is still being applied. */
     public List<Transaction> getTransactions()
     {
-        return transactions;
+        return new ArrayList<>(transactions);
     }
 
     public void executePurchase(final String memberName, final int optionIndex, final int quantity, final double cost, final double commission) {
@@ -136,8 +161,9 @@ public abstract class Event implements Serializable
         participants.add(userName);
     }
 
+    /** A defensive copy - safe to iterate even while a concurrent trade on this event is still being applied. */
     public Set<String> getParticipants() {
-        return participants;
+        return new HashSet<>(participants);
     }
 
     public void collectCommission(final double commission) {

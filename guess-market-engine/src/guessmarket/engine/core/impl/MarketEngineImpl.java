@@ -1,62 +1,70 @@
 package guessmarket.engine.core.impl;
 
 import guessmarket.engine.core.api.MarketEngine;
-import guessmarket.engine.core.api.MarketMethodSpec;
-import guessmarket.dto.ChartPointDTO;
+import guessmarket.engine.core.factory.EventFactory;
+import guessmarket.engine.core.mapping.DtoMapper;
+import guessmarket.engine.core.settlement.EventCloser;
+import guessmarket.engine.core.trading.OrderBookTradeExecutor;
 import guessmarket.dto.EventDetailsDTO;
 import guessmarket.dto.EventSummaryDTO;
-import guessmarket.dto.OptionDTO;
 import guessmarket.dto.ReceiptDTO;
-import guessmarket.dto.TransactionDTO;
 import guessmarket.dto.UserSummaryDTO;
-import guessmarket.dto.lmsr.LmsrEventDetailsDTO;
-import guessmarket.dto.orderbook.OptionBookDTO;
-import guessmarket.dto.orderbook.OrderBookEventDetailsDTO;
-import guessmarket.dto.orderbook.OrderDTO;
-import guessmarket.dto.orderbook.ParticipantHoldingDTO;
-import guessmarket.engine.models.BalancePoint;
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
 import guessmarket.engine.models.EventStatus;
-import guessmarket.engine.models.lmsr.LmsrEvent;
 import guessmarket.engine.models.orderbook.Fill;
-import guessmarket.engine.models.orderbook.MarketQuote;
 import guessmarket.engine.models.orderbook.Mint;
-import guessmarket.engine.models.orderbook.Order;
-import guessmarket.engine.models.orderbook.PricePoint;
-import guessmarket.engine.models.orderbook.OrderBook;
 import guessmarket.engine.models.orderbook.OrderBookEvent;
 import guessmarket.engine.models.orderbook.OrderSide;
 import guessmarket.engine.models.orderbook.TradeOutcome;
 import guessmarket.engine.models.Option;
-import guessmarket.engine.models.Transaction;
 import guessmarket.engine.models.User;
 import guessmarket.engine.billing.api.CommissionCalculator;
 import guessmarket.engine.parsing.api.FileParser;
-import guessmarket.engine.util.Amounts;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.time.LocalDateTime;
+import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+// ============================================================================
+// DECISIONS MADE
+// ============================================================================
+// - Names (usernames, event names) are rejected outright if empty or padded
+//   with whitespace, never silently trimmed - they're lookup keys, and a
+//   trimmed copy the caller doesn't know about would break later lookups.
+// - Usernames are unique case-insensitively; event names are compared exactly.
+// - A user/Market Maker is only blocked from acting if ALREADY blocked - any
+//   single legal action (buying shares, opening an event) may push them
+//   negative for the first time, at which point they're blocked afterward.
+//   Recovery is only via depositCash.
+// - Thread-safety: every operation on a given Event (a trade, an open, a
+//   close, even a read for a DTO) is synchronized on that Event object for
+//   its full duration - not just the write - so two concurrent operations on
+//   the SAME event can never interleave. users/events are separately locked,
+//   only around their own membership checks (register/create).
+// - Event creation is two methods (createLmsrEvent/createOrderBookEvent), not
+//   one method with a variant-type parameter - see EventFactory.
+// - addEventsFromUpload commits all-or-nothing: every event name is checked
+//   against the pool before any of them are written.
+// - closeEvent never checks isBlocked() - closing is how a blocked MM's event
+//   gets resolved and everyone paid out; blocking it would strand the funds.
+// - submitOrder's SELL check only verifies shares exist and aren't already
+//   reserved by another open ask - holdings don't move until a real fill.
+// - EventCreator validation skips name-uniqueness - that check only matters
+//   together with the write, so it happens atomically in registerCreatedEvent.
+// ============================================================================
 
 public class MarketEngineImpl implements MarketEngine
 {
-    public static final double COST_OF_SHARE = 1.0;
-    
     private final Map<String, Event> events;
     private final Map<String, User> users;
     private final Map<String, String> eventMarketMakers;
     private final FileParser parser;
     private final CommissionCalculator commissionCalculator;
-    private boolean isDataLoaded;
+    private final OrderBookTradeExecutor orderBookTradeExecutor;
+    private final EventCloser eventCloser;
 
     public MarketEngineImpl(final FileParser parser, final CommissionCalculator commissionCalculator)
     {
@@ -65,62 +73,19 @@ public class MarketEngineImpl implements MarketEngine
         this.events = new ConcurrentHashMap<>();
         this.users = new ConcurrentHashMap<>();
         this.eventMarketMakers = new ConcurrentHashMap<>();
-        this.isDataLoaded = false;
-    }
-
-    @Override
-    public void loadData(String filePath) throws Exception
-    {
-        if (!isPathOnlyEnglishCharactersAndStandardSymbols(filePath)) {
-            throw new IllegalArgumentException("Error: Only English characters and standard path symbols are allowed in the file path.");
-        }
-        final List<Event> loadedEvents;
-        try (java.io.InputStream xml = java.nio.file.Files.newInputStream(java.nio.file.Path.of(filePath))) {
-            loadedEvents = parser.parse(xml);
-        }
-        this.events.clear();
-        for (final Event event : loadedEvents) {
-            this.events.put(event.getName(), event);
-        }
-
-        // The parser only ever returns events now - Ex3's schema has no GM-users at all.
-        this.users.clear();
-        this.eventMarketMakers.clear();
-
-        this.isDataLoaded = true;
+        this.orderBookTradeExecutor = new OrderBookTradeExecutor(this.users, this.eventMarketMakers, this.commissionCalculator);
+        this.eventCloser = new EventCloser(this.users, this.commissionCalculator);
     }
 
     @Override
     public List<EventSummaryDTO> getAllEvents()
     {
-        if (!isDataLoaded) {
-            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
-        }
-
         final List<EventSummaryDTO> result = new ArrayList<>();
 
         for (final Event event : this.events.values())
         {
-            result.add(mapToSummaryDTO(event));
-        }
-
-        return result;
-    }
-
-    @Override
-    public List<EventSummaryDTO> getActiveEvents()
-    {
-        if (!isDataLoaded) {
-            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
-        }
-
-        final List<EventSummaryDTO> result = new ArrayList<>();
-
-        for (final Event event : this.events.values())
-        {
-            if (event.getActiveStatus())
-            {
-                result.add(mapToSummaryDTO(event));
+            synchronized (event) {
+                result.add(DtoMapper.mapToSummaryDTO(event, eventMarketMakers.get(event.getName())));
             }
         }
 
@@ -128,393 +93,258 @@ public class MarketEngineImpl implements MarketEngine
     }
 
     @Override
-    public EventDetailsDTO getEventDetails(final String eventName)
+    public void addEventsFromUpload(final String uploaderName, final InputStream xml) throws Exception
     {
-        if (!isDataLoaded) {
-            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
-        }
+        final User uploader = requireUser(uploaderName);
+        final List<Event> parsedEvents = parser.parse(xml);
 
-        final Event event = this.events.get(eventName);
-        if (event == null) {
-            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
+        synchronized (events) {
+            for (final Event event : parsedEvents) {
+                if (events.containsKey(event.getName())) {
+                    throw new IllegalArgumentException("An event named '" + event.getName() + "' already exists.");
+                }
+            }
+
+            for (final Event event : parsedEvents) {
+                events.put(event.getName(), event);
+                eventMarketMakers.put(event.getName(), uploaderName);
+                uploader.addMarketMakerEvent(event.getName());
+            }
         }
-        return mapToDetailsDTO(event);
     }
 
     @Override
     public List<UserSummaryDTO> getAllUsers()
     {
-        if (!isDataLoaded) {
-            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
-        }
-
         final List<UserSummaryDTO> result = new ArrayList<>();
         for (final User user : this.users.values()) {
             final List<String> relevantEventNames = new ArrayList<>();
             for (final Event event : this.events.values()) {
                 final boolean isOwner = user.getName().equals(eventMarketMakers.get(event.getName()));
-                if (isOwner || isParticipant(user.getName(), event)) {
+                final boolean participates;
+                synchronized (event) {
+                    participates = isParticipant(user.getName(), event);
+                }
+                if (isOwner || participates) {
                     relevantEventNames.add(event.getName());
                 }
             }
             final boolean isMarketMaker = user.getMarketMakerForEvents() != null && !user.getMarketMakerForEvents().isEmpty();
-            result.add(new UserSummaryDTO(user.getName(), user.getBalance(), user.isBlocked(), isMarketMaker, relevantEventNames, balanceHistoryOf(user)));
+            result.add(new UserSummaryDTO(user.getName(), user.getBalance(), user.isBlocked(), isMarketMaker, relevantEventNames, DtoMapper.balanceHistoryOf(user), DtoMapper.accountHistoryOf(user)));
         }
         return result;
     }
 
-    private boolean isParticipant(final String userName, final Event event) {
-        return event.getParticipants().contains(userName);
+    @Override
+    public void registerUser(final String name) throws Exception
+    {
+        requireCleanName(name, "Username");
+
+        synchronized (users) {
+            for (final String existingName : users.keySet()) {
+                if (existingName.equalsIgnoreCase(name)) {
+                    throw new IllegalArgumentException("Username '" + name + "' is already taken.");
+                }
+            }
+            users.put(name, new User(name, 0.0, new ArrayList<>()));
+        }
     }
 
-    /** Converts a user's recorded balance readings into plottable points. */
-    private List<ChartPointDTO> balanceHistoryOf(final User user) {
-        final List<ChartPointDTO> points = new ArrayList<>();
-        for (final BalancePoint point : user.getBalanceHistory()) {
-            points.add(new ChartPointDTO(point.at(), point.balance()));
+    @Override
+    public void depositCash(final String userName, final double amount) throws Exception
+    {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Deposit amount must be positive.");
         }
-        return points;
+        final User user = requireUser(userName);
+        user.increaseBalance(amount, "Deposit");
+    }
+
+    @Override
+    public EventDetailsDTO getEventDetails(final String eventName)
+    {
+        final Event event = requireEvent(eventName);
+        synchronized (event) {
+            return DtoMapper.mapToDetailsDTO(event, eventMarketMakers.get(event.getName()));
+        }
     }
 
     @Override
     public ReceiptDTO buyShares(final String memberName, final String eventName, final int optionIndex, final int quantity) throws Exception
     {
-        if (!isDataLoaded) {
-            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
-        }
-
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be positive.");
         }
 
-        final Event event = events.get(eventName);
-        if (event == null) {
-            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
-        }
+        final Event event = requireEvent(eventName);
 
-        if (event.getStatus() != EventStatus.ACTIVE) {
-            throw new IllegalArgumentException("Cannot trade on Event '" + eventName + "' because it is not active (current status: " + event.getStatus() + ").");
-        }
+        synchronized (event) {
+            requireActiveEvent(event, eventName);
+            requireValidOptionIndex(event, optionIndex);
 
-        if (optionIndex < 0 || optionIndex >= event.getOptions().size()) {
-            throw new IllegalArgumentException("Invalid option selection.");
-        }
+            final User buyer = requireNonBlockedUser(memberName);
 
-        final User buyer = users.get(memberName);
-        if (buyer == null) {
-            throw new IllegalArgumentException("User '" + memberName + "' does not exist.");
-        }
-        if (buyer.isBlocked()) {
-            throw new IllegalArgumentException("User '" + memberName + "' is blocked due to a negative balance and cannot perform further actions.");
-        }
+            final double cost = event.calculateCost(optionIndex, quantity);
+            final double commission = commissionCalculator.calculate(cost, event.getCommission(), event.getCommissionType(), CommissionType.ON_PURCHASE);
+            final double totalCost = cost + commission;
 
-        final double cost = event.calculateCost(optionIndex, quantity);
-        final double commission = commissionCalculator.calculate(cost, event.getCommission(), event.getCommissionType(), CommissionType.ON_PURCHASE);
-        final double totalCost = cost + commission;
-
-        buyer.decreaseBalance(totalCost);
-        if (buyer.getBalance() < 0) {
-            buyer.setBlocked(true);
-        }
-
-        event.increaseAccountBalance(cost);
-        event.executePurchase(memberName, optionIndex, quantity, cost, commission);
-        event.addParticipant(memberName);
-
-        if (commission > 0) {
-            event.recordCommissionPaid(memberName, commission);
-            final User mm = users.get(eventMarketMakers.get(eventName));
-            if (mm != null) {
-                mm.increaseBalance(commission);
-            }
-        }
-
-        return new ReceiptDTO(cost, commission, totalCost, event.getCommissionType() == CommissionType.ON_PURCHASE, mapToDetailsDTO(event));
-    }
-
-    @Override
-    public void submitOrder(final String userName, final String eventName, final int optionIndex, final OrderSide side, final double price, final int quantity) throws Exception
-    {
-        if (!isDataLoaded) {
-            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
-        }
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("Quantity must be positive.");
-        }
-
-        final Event event = events.get(eventName);
-        if (event == null) {
-            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
-        }
-        if (!(event instanceof OrderBookEvent)) {
-            throw new IllegalArgumentException("Event '" + eventName + "' is not an Order Book event.");
-        }
-        if (event.getStatus() != EventStatus.ACTIVE) {
-            throw new IllegalArgumentException("Cannot trade on Event '" + eventName + "' because it is not active (current status: " + event.getStatus() + ").");
-        }
-        if (optionIndex < 0 || optionIndex >= event.getOptions().size()) {
-            throw new IllegalArgumentException("Invalid option selection.");
-        }
-
-        final User trader = users.get(userName);
-        if (trader == null) {
-            throw new IllegalArgumentException("User '" + userName + "' does not exist.");
-        }
-        if (trader.isBlocked()) {
-            throw new IllegalArgumentException("User '" + userName + "' is blocked due to a negative balance and cannot perform further actions.");
-        }
-
-        final OrderBookEvent obEvent = (OrderBookEvent) event;
-        obEvent.addParticipant(userName);
-
-        if (side == OrderSide.SELL) {
-            // Only check that the shares exist and aren't already promised to another resting ask -
-            // don't touch holdings yet. The shares stay the seller's (and would still pay out at
-            // close) until a buyer actually takes them; see applyFill, where ownership actually
-            // transfers at the moment of a real trade, not merely on placing the ask.
-            final int held = obEvent.getHoldings().get(userName, optionIndex);
-            final int alreadyOffered = sellReservedQuantity(obEvent.getMarket().getBook(optionIndex), userName);
-            final int available = held - alreadyOffered;
-            if (available < quantity) {
-                throw new IllegalArgumentException("User '" + userName + "' only has " + available + " unreserved shares of this option available to sell (holds " + held + ", " + alreadyOffered + " already offered in other open asks), cannot sell " + quantity + ".");
-            }
-        }
-
-        final TradeOutcome outcome = obEvent.getMarket().submit(userName, optionIndex, side, price, quantity);
-
-        for (final Fill fill : outcome.getFills()) {
-            applyFill(obEvent, optionIndex, fill);
-        }
-        for (final Mint mint : outcome.getMints()) {
-            applyMint(obEvent, mint);
-        }
-    }
-
-    private void applyFill(final OrderBookEvent obEvent, final int optionIndex, final Fill fill) {
-        final boolean restingIsBuy = fill.getRestingOrder().getSide() == OrderSide.BUY;
-        final String buyerName = restingIsBuy ? fill.getRestingOrder().getUserName() : fill.getIncomingOrder().getUserName();
-        final String sellerName = restingIsBuy ? fill.getIncomingOrder().getUserName() : fill.getRestingOrder().getUserName();
-
-        final double tradeValue = fill.getPrice() * fill.getQuantity();
-        final double commission = commissionCalculator.calculate(tradeValue, obEvent.getCommission(), obEvent.getCommissionType(), CommissionType.ON_PURCHASE);
-
-        final User buyer = users.get(buyerName);
-        if (buyer != null) {
-            buyer.decreaseBalance(tradeValue + commission);
+            buyer.decreaseBalance(totalCost, "Bought " + quantity + " shares of \"" + event.getOptions().get(optionIndex).getName() + "\" in \"" + eventName + "\"");
             if (buyer.getBalance() < 0) {
                 buyer.setBlocked(true);
             }
-            obEvent.getHoldings().increase(buyerName, optionIndex, fill.getQuantity());
-            obEvent.recordSpent(buyerName, tradeValue + commission);
-            obEvent.recordSpentOnOption(buyerName, optionIndex, tradeValue);
-        }
 
-        final User seller = users.get(sellerName);
-        if (seller != null) {
-            seller.increaseBalance(tradeValue);
-            obEvent.getHoldings().decrease(sellerName, optionIndex, fill.getQuantity());
-            obEvent.recordReceived(sellerName, tradeValue);
-        }
+            event.increaseAccountBalance(cost);
+            event.executePurchase(memberName, optionIndex, quantity, cost, commission);
+            event.addParticipant(memberName);
 
-        if (commission > 0) {
-            obEvent.recordCommissionPaid(buyerName, commission);
-        }
-        creditCommissionToMm(obEvent, commission);
-    }
-
-    /** How many shares of this option the user is already offering across their other still-open
-     * asks - what a new sell order must be checked against, since those shares aren't gone yet
-     * but are already spoken for. */
-    private int sellReservedQuantity(final OrderBook book, final String userName) {
-        int total = 0;
-        for (final Order order : book.getSellOrders()) {
-            if (order.getUserName().equals(userName)) {
-                total += order.getQuantity();
+            if (commission > 0) {
+                event.recordCommissionPaid(memberName, commission);
+                final User mm = users.get(eventMarketMakers.get(eventName));
+                if (mm != null) {
+                    mm.increaseBalance(commission, "Commission from " + memberName + "'s purchase in \"" + eventName + "\"");
+                }
             }
-        }
-        return total;
-    }
 
-    private void applyMint(final OrderBookEvent obEvent, final Mint mint) {
-        applyMintSide(obEvent, mint.getOrderA().getUserName(), mint.getOptionIndexA(), mint.getPriceA(), mint.getQuantity());
-        applyMintSide(obEvent, mint.getOrderB().getUserName(), mint.getOptionIndexB(), mint.getPriceB(), mint.getQuantity());
-    }
-
-    private void applyMintSide(final OrderBookEvent obEvent, final String userName, final int optionIndex, final double price, final int quantity) {
-        final double cost = price * quantity;
-        final double commission = commissionCalculator.calculate(cost, obEvent.getCommission(), obEvent.getCommissionType(), CommissionType.ON_PURCHASE);
-
-        final User user = users.get(userName);
-        if (user != null) {
-            user.decreaseBalance(cost + commission);
-            if (user.getBalance() < 0) {
-                user.setBlocked(true);
-            }
-            obEvent.getHoldings().increase(userName, optionIndex, quantity);
-            obEvent.recordSpent(userName, cost + commission);
-            obEvent.recordSpentOnOption(userName, optionIndex, cost);
-        }
-
-        obEvent.increaseAccountBalance(cost);
-        if (commission > 0) {
-            obEvent.recordCommissionPaid(userName, commission);
-        }
-        creditCommissionToMm(obEvent, commission);
-    }
-
-    private void creditCommissionToMm(final OrderBookEvent obEvent, final double commission) {
-        if (commission > 0) {
-            final User mm = users.get(eventMarketMakers.get(obEvent.getName()));
-            if (mm != null) {
-                mm.increaseBalance(commission);
-                // The ledger behind getProfitOrLoss() already counts every cent the Market Maker
-                // SPENDS on this event, so it has to count what the event pays them too. Without
-                // this, an MM whose balance never moved (for instance one who only traded with
-                // themselves) is reported as having lost exactly the commission they earned.
-                obEvent.recordReceived(mm.getName(), commission);
-            }
+            return new ReceiptDTO(cost, commission, totalCost, event.getCommissionType() == CommissionType.ON_PURCHASE, DtoMapper.mapToDetailsDTO(event, eventMarketMakers.get(eventName)));
         }
     }
 
     @Override
     public void openEvent(final String mmName, final String eventName) throws Exception
     {
-        if (!isDataLoaded) {
-            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
-        }
-
-        final Event event = events.get(eventName);
-        if (event == null) {
-            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
-        }
+        final Event event = requireEvent(eventName);
 
         final User mm = requireAssignedMarketMaker(mmName, eventName);
 
-        if (event.getStatus() != EventStatus.NOT_ACTIVE) {
-            throw new IllegalArgumentException("Event '" + eventName + "' cannot be opened (current status: " + event.getStatus() + ").");
-        }
-        if (mm.isBlocked()) {
-            throw new IllegalArgumentException("Event '" + eventName + "' cannot be opened because Market Maker '" + mmName + "' has a negative balance and cannot cover the cost of subsidizing it.");
-        }
+        synchronized (event) {
+            if (event.getStatus() != EventStatus.NOT_ACTIVE) {
+                throw new IllegalArgumentException("Event '" + eventName + "' cannot be opened (current status: " + event.getStatus() + ").");
+            }
+            if (mm.isBlocked()) {
+                throw new IllegalArgumentException("Event '" + eventName + "' cannot be opened because Market Maker '" + mmName + "' has a negative balance and cannot cover the cost of subsidizing it (blocked).");
+            }
 
-        if (event instanceof LmsrEvent) {
-            final double subsidy = ((LmsrEvent) event).calculateInitialSubsidy();
-            if (mm.getBalance() < subsidy) {
-                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + Amounts.format(mm.getBalance()) + ") to open Event '" + eventName + "' (requires a subsidy of " + Amounts.format(subsidy) + ").");
+            final double cost = event.calculateOpeningCost();
+            mm.decreaseBalance(cost, "Opened \"" + eventName + "\" (" + event.openingCostLabel() + ")");
+            if (mm.getBalance() < 0) {
+                mm.setBlocked(true);
             }
-            mm.decreaseBalance(subsidy);
-            event.increaseAccountBalance(subsidy);
-            event.addParticipant(mmName);
+            event.applyOpening(mmName, cost);
             event.activate();
-        } else if (event instanceof OrderBookEvent) {
-            final OrderBookEvent obEvent = (OrderBookEvent) event;
-            final double cost = obEvent.getInitial() * (double) obEvent.getD();
-            if (mm.getBalance() < cost) {
-                throw new IllegalArgumentException("User '" + mmName + "' has insufficient funds (" + Amounts.format(mm.getBalance()) + ") to open Event '" + eventName + "' (requires " + Amounts.format(cost) + ").");
-            }
-            mm.decreaseBalance(cost);
-            event.increaseAccountBalance(cost);
-            final double costPerOption = cost / event.getOptions().size();
-            for (int i = 0; i < event.getOptions().size(); i++) {
-                obEvent.getHoldings().increase(mmName, i, obEvent.getInitial());
-                obEvent.recordSpentOnOption(mmName, i, costPerOption);
-            }
-            obEvent.recordSpent(mmName, cost);
-            obEvent.addParticipant(mmName);
-            event.activate();
-        } else {
-            throw new IllegalStateException("Unknown event type: " + event.getClass().getSimpleName());
         }
     }
 
     @Override
     public void closeEvent(final String mmName, final String eventName, final int winningOptionIndex) throws Exception
     {
-        if (!isDataLoaded) {
-            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
-        }
-
-        final Event event = events.get(eventName);
-        if (event == null) {
-            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
-        }
+        final Event event = requireEvent(eventName);
 
         final User mm = requireAssignedMarketMaker(mmName, eventName);
 
+        synchronized (event) {
+            if (event.getStatus() != EventStatus.ACTIVE) {
+                throw new IllegalArgumentException("Event '" + eventName + "' cannot be closed (current status: " + event.getStatus() + ").");
+            }
+
+            if (winningOptionIndex < 0 || winningOptionIndex >= event.getOptions().size()) {
+                throw new IllegalArgumentException("Invalid winning option selection.");
+            }
+
+            event.close(winningOptionIndex);
+            eventCloser.closeEvent(event, winningOptionIndex, mm);
+
+            final double leftover = event.getAccountBalance();
+            if (leftover > 0) {
+                event.decreaseAccountBalance(leftover);
+                mm.increaseBalance(leftover, "Leftover funds returned from \"" + eventName + "\"");
+                event.recordPayoutReceived(mm.getName(), leftover);
+            }
+        }
+    }
+
+    @Override
+    public void submitOrder(final String userName, final String eventName, final int optionIndex, final OrderSide side, final double price, final int quantity) throws Exception
+    {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be positive.");
+        }
+
+        final Event event = requireEvent(eventName);
+        if (!(event instanceof OrderBookEvent)) {
+            throw new IllegalArgumentException("Event '" + eventName + "' is not an Order Book event.");
+        }
+
+        synchronized (event) {
+            requireActiveEvent(event, eventName);
+            requireValidOptionIndex(event, optionIndex);
+
+            requireNonBlockedUser(userName);
+
+            final OrderBookEvent obEvent = (OrderBookEvent) event;
+            obEvent.addParticipant(userName);
+
+            if (side == OrderSide.SELL) {
+                final int held = obEvent.getHoldings().get(userName, optionIndex);
+                final int alreadyOffered = OrderBookTradeExecutor.sellReservedQuantity(obEvent.getMarket().getBook(optionIndex), userName);
+                final int available = held - alreadyOffered;
+                if (available < quantity) {
+                    throw new IllegalArgumentException("User '" + userName + "' only has " + available + " unreserved shares of this option available to sell (holds " + held + ", " + alreadyOffered + " already offered in other open asks), cannot sell " + quantity + ".");
+                }
+            }
+
+            final TradeOutcome outcome = obEvent.getMarket().submit(userName, optionIndex, side, price, quantity);
+
+            for (final Fill fill : outcome.getFills()) {
+                orderBookTradeExecutor.applyFill(obEvent, optionIndex, fill);
+            }
+            for (final Mint mint : outcome.getMints()) {
+                orderBookTradeExecutor.applyMint(obEvent, mint);
+            }
+        }
+    }
+
+    @Override
+    public void createLmsrEvent(final String creatorName, final String name, final String description,
+                           final int commission, final CommissionType commissionType,
+                           final List<String> optionNames, final int b) throws Exception
+    {
+        final User creator = requireEventCreator(creatorName, name, description, commission, commissionType);
+        final List<Option> options = EventFactory.buildOptions(optionNames);
+        final Event created = EventFactory.buildLmsrEvent(name, description.trim(), commission, commissionType, options, b);
+        registerCreatedEvent(created, creatorName, creator);
+    }
+
+    @Override
+    public void createOrderBookEvent(final String creatorName, final String name, final String description,
+                           final int commission, final CommissionType commissionType,
+                           final List<String> optionNames, final boolean allowMint, final int initial, final int d) throws Exception
+    {
+        final User creator = requireEventCreator(creatorName, name, description, commission, commissionType);
+        final List<Option> options = EventFactory.buildOptions(optionNames);
+        final Event created = EventFactory.buildOrderBookEvent(name, description.trim(), commission, commissionType, options, allowMint, initial, d);
+        registerCreatedEvent(created, creatorName, creator);
+    }
+
+    // ============================================================================
+    // Helpers - private, everything below is called from the public methods above.
+    // ============================================================================
+
+    private boolean isParticipant(final String userName, final Event event) {
+        return event.getParticipants().contains(userName);
+    }
+
+    private static void requireCleanName(final String name, final String label) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException(label + " cannot be empty.");
+        }
+        if (!name.equals(name.trim())) {
+            throw new IllegalArgumentException(label + " cannot start or end with whitespace.");
+        }
+    }
+
+    private void requireActiveEvent(final Event event, final String eventName) {
         if (event.getStatus() != EventStatus.ACTIVE) {
-            throw new IllegalArgumentException("Event '" + eventName + "' cannot be closed (current status: " + event.getStatus() + ").");
-        }
-        // Deliberately no isBlocked() check here, unlike opening an event or trading: closing is
-        // how a blocked MM's event gets resolved and everyone's money paid out. Blocking a market
-        // maker from ever closing their own event would strand every participant's funds in it
-        // permanently, with no way to unblock the MM either (closing is what could pay them back
-        // above zero).
-
-        if (winningOptionIndex < 0 || winningOptionIndex >= event.getOptions().size()) {
-            throw new IllegalArgumentException("Invalid winning option selection.");
-        }
-
-        event.close(winningOptionIndex);
-
-        if (event instanceof LmsrEvent) {
-            closeLmsrEvent(event, winningOptionIndex, mm);
-        } else if (event instanceof OrderBookEvent) {
-            closeOrderBookEvent((OrderBookEvent) event, winningOptionIndex, mm);
-        }
-
-        final double leftover = event.getAccountBalance();
-        // Sweep whatever is actually left, not just amounts over a penny: the spec says funds
-        // remaining in the event account return to the Market Maker, and the old 0.01 threshold
-        // stranded up to a cent inside a closed event (visible as "$0.01" on an event with a small
-        // b). Still strictly positive so a floating-point negative is never passed to decrease().
-        if (leftover > 0) {
-            event.decreaseAccountBalance(leftover);
-            mm.increaseBalance(leftover);
-            if (event instanceof OrderBookEvent) {
-                // Likewise: whatever is swept back out of the event account is money returned to
-                // the Market Maker, and the profit/loss ledger has to account for it.
-                ((OrderBookEvent) event).recordReceived(mm.getName(), leftover);
-            }
-        }
-    }
-
-    private void closeLmsrEvent(final Event event, final int winningOptionIndex, final User mm) {
-        final Option winningOption = event.getOptions().get(winningOptionIndex);
-        for (final Transaction transaction : event.getTransactions()) {
-            if (transaction.getOptionName().equals(winningOption.getName())) {
-                payOutWinner(event, transaction.getUserName(), transaction.getQuantity() * COST_OF_SHARE, mm);
-            }
-        }
-    }
-
-    private void closeOrderBookEvent(final OrderBookEvent obEvent, final int winningOptionIndex, final User mm) {
-        for (final Map.Entry<String, Integer> holder : obEvent.getHoldings().holdersOf(winningOptionIndex).entrySet()) {
-            payOutWinner(obEvent, holder.getKey(), holder.getValue() * (double) obEvent.getD(), mm);
-        }
-    }
-
-    private void payOutWinner(final Event event, final String winnerName, final double winAmount, final User mm) {
-        final double closeCommission = commissionCalculator.calculate(winAmount, event.getCommission(), event.getCommissionType(), CommissionType.ON_CLOSE);
-        final double payout = winAmount - closeCommission;
-
-        event.decreaseAccountBalance(winAmount);
-        if (closeCommission > 0) {
-            event.collectCommission(closeCommission);
-            event.recordCommissionPaid(winnerName, closeCommission);
-            mm.increaseBalance(closeCommission);
-            if (event instanceof OrderBookEvent) {
-                // Same reasoning as creditCommissionToMm: close-time commission is money the event
-                // pays the Market Maker, so the profit/loss ledger has to see it.
-                ((OrderBookEvent) event).recordReceived(mm.getName(), closeCommission);
-            }
-        }
-
-        final User winner = users.get(winnerName);
-        if (winner != null) {
-            winner.increaseBalance(payout);
-        }
-        if (event instanceof OrderBookEvent) {
-            ((OrderBookEvent) event).recordReceived(winnerName, payout);
+            throw new IllegalArgumentException("Cannot trade on Event '" + eventName + "' because it is not active (current status: " + event.getStatus() + ").");
         }
     }
 
@@ -530,286 +360,71 @@ public class MarketEngineImpl implements MarketEngine
         return mm;
     }
 
-    @Override
-    public String createEvent(final String creatorName, final String name, final String description,
-                           final int commission, final CommissionType commissionType,
-                           final List<String> optionNames, final MarketMethodSpec method) throws Exception
-    {
-        if (!isDataLoaded) {
-            throw new IllegalStateException("No " + parser.getFileType() + " is currently loaded in the system.");
+    private Event requireEvent(final String eventName) {
+        if (eventName == null) {
+            throw new IllegalArgumentException("Event name cannot be null.");
         }
+        final Event event = events.get(eventName);
+        if (event == null) {
+            throw new IllegalArgumentException("Event '" + eventName + "' does not exist.");
+        }
+        return event;
+    }
 
-        final User creator = users.get(creatorName);
-        if (creator == null) {
-            throw new IllegalArgumentException("User '" + creatorName + "' does not exist.");
+    private User requireUser(final String userName) {
+        if (userName == null) {
+            throw new IllegalArgumentException("Username cannot be null.");
         }
+        final User user = users.get(userName);
+        if (user == null) {
+            throw new IllegalArgumentException("User '" + userName + "' does not exist.");
+        }
+        return user;
+    }
+
+    private User requireNonBlockedUser(final String userName) {
+        final User user = requireUser(userName);
+        if (user.isBlocked()) {
+            throw new IllegalArgumentException("User '" + userName + "' is blocked due to a negative balance and cannot perform further actions.");
+        }
+        return user;
+    }
+
+    private void requireValidOptionIndex(final Event event, final int optionIndex) {
+        if (optionIndex < 0 || optionIndex >= event.getOptions().size()) {
+            throw new IllegalArgumentException("Invalid option selection.");
+        }
+    }
+
+    private User requireEventCreator(final String creatorName, final String name, final String description,
+                                      final int commission, final CommissionType commissionType) {
+        final User creator = requireUser(creatorName);
         if (creator.isBlocked()) {
             throw new IllegalArgumentException("User '" + creatorName + "' has a negative balance and cannot create new events.");
         }
 
-        final String cleanName = name == null ? "" : name.trim();
-        if (cleanName.isEmpty()) {
-            throw new IllegalArgumentException("Event name cannot be empty.");
-        }
-        if (events.containsKey(cleanName)) {
-            throw new IllegalArgumentException("An event named '" + cleanName + "' already exists.");
-        }
-        final String cleanDescription = description == null ? "" : description.trim();
-        if (cleanDescription.isEmpty()) {
+        requireCleanName(name, "Event name");
+        if (description == null || description.trim().isEmpty()) {
             throw new IllegalArgumentException("Event description cannot be empty.");
         }
         if (commissionType == null) {
             throw new IllegalArgumentException("A commission type must be chosen.");
         }
-        // The same bounds the file parser enforces - shared constants rather than repeated literals,
-        // so a created event can never be less valid than a loaded one.
         if (commission < Event.COMMISSION_VALUE_MIN || commission > Event.COMMISSION_VALUE_MAX) {
             throw new IllegalArgumentException("Commission value must be between " + Event.COMMISSION_VALUE_MIN
                 + " and " + Event.COMMISSION_VALUE_MAX + " (got " + commission + ").");
         }
+        return creator;
+    }
 
-        final List<Option> options = buildOptions(optionNames);
-        final Event created = buildEvent(cleanName, cleanDescription, commission, commissionType, options, method);
-
-        events.put(created.getName(), created);
-        eventMarketMakers.put(created.getName(), creatorName);
+    private void registerCreatedEvent(final Event created, final String creatorName, final User creator) {
+        synchronized (events) {
+            if (events.containsKey(created.getName())) {
+                throw new IllegalArgumentException("An event named '" + created.getName() + "' already exists.");
+            }
+            events.put(created.getName(), created);
+            eventMarketMakers.put(created.getName(), creatorName);
+        }
         creator.addMarketMakerEvent(created.getName());
-        return created.getName();
-    }
-
-    /** Validates and builds the option list, applying the parser's rules: exactly two, named, distinct. */
-    private List<Option> buildOptions(final List<String> optionNames) {
-        if (optionNames == null || optionNames.size() != 2) {
-            throw new IllegalArgumentException("An event must have exactly two options.");
-        }
-        final List<Option> options = new ArrayList<>();
-        final Set<String> seen = new HashSet<>();
-        for (final String raw : optionNames) {
-            final String optionName = raw == null ? "" : raw.trim();
-            if (optionName.isEmpty()) {
-                throw new IllegalArgumentException("Every option must have a name.");
-            }
-            if (!seen.add(optionName.toLowerCase())) {
-                throw new IllegalArgumentException("Duplicate option name found ('" + optionName + "').");
-            }
-            options.add(new Option(optionName));
-        }
-        return options;
-    }
-
-    /** Builds the right Event subclass for the requested trading method, validating its settings. */
-    private Event buildEvent(final String name, final String description, final int commission,
-                             final CommissionType commissionType, final List<Option> options,
-                             final MarketMethodSpec method) {
-        if (method instanceof MarketMethodSpec.Lmsr lmsr) {
-            if (lmsr.b() <= 0) {
-                throw new IllegalArgumentException("LMSR 'b' must be a positive integer (got " + lmsr.b() + ").");
-            }
-            return new LmsrEvent(name, description, commission, commissionType, options, lmsr.b());
-        }
-        if (method instanceof MarketMethodSpec.OrderBook book) {
-            if (book.initial() < 0) {
-                throw new IllegalArgumentException("Order Book 'initial' must not be negative (got " + book.initial() + ").");
-            }
-            if (book.d() <= 0) {
-                throw new IllegalArgumentException("Order Book 'd' (base value) must be a positive integer (got " + book.d() + ").");
-            }
-            return new OrderBookEvent(name, description, commission, commissionType, options,
-                book.allowMint(), book.initial(), book.d());
-        }
-        throw new IllegalArgumentException("A trading method must be chosen.");
-    }
-
-    @Override
-    public void saveState(final String filePath) throws Exception
-    {
-        if (!isPathOnlyEnglishCharactersAndStandardSymbols(filePath)) {
-            throw new IllegalArgumentException("Error: Only English characters and standard path symbols are allowed in the file path.");
-        }
-        if (!isDataLoaded) {
-            throw new IllegalStateException("No data is currently loaded to save.");
-        }
-
-        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(filePath + ".dat"))) {
-            oos.writeObject(new ConcurrentHashMap<>(events));
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public void loadState(final String filePath) throws Exception
-    {
-        if (!isPathOnlyEnglishCharactersAndStandardSymbols(filePath)) {
-            throw new IllegalArgumentException("Error: Only English characters and standard path symbols are allowed in the file path.");
-        }
-        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filePath + ".dat"))) {
-            Map<String, Event> loaded = (Map<String, Event>) ois.readObject();
-            events.clear();
-            events.putAll(loaded);
-            this.isDataLoaded = true;
-        }
-    }
-
-    @Override
-    public void shutdown() throws Exception
-    {
-        // TODO: Implement shutdown/save logic
-    }
-
-    // ---- DTO Mapping Helpers ----
-
-    private EventSummaryDTO mapToSummaryDTO(final Event event) {
-        final List<String> optionNames = new ArrayList<>();
-        for (final Option option : event.getOptions()) {
-            optionNames.add(option.getName());
-        }
-
-        return new EventSummaryDTO(
-            event.getName(),
-            event.getDescription(),
-            event.getCommission(),
-            event.getCommissionType().name(),
-            optionNames,
-            event.getStatus().name(),
-            (event instanceof LmsrEvent) ? "LMSR" : "ORDER_BOOK",
-            eventMarketMakers.get(event.getName()),
-            event.getAccountBalance()
-        );
-    }
-
-    private EventDetailsDTO mapToDetailsDTO(final Event event) {
-        if (event instanceof LmsrEvent) {
-            return mapLmsrDetailsDTO(event);
-        }
-        return mapOrderBookDetailsDTO((OrderBookEvent) event);
-    }
-
-    private LmsrEventDetailsDTO mapLmsrDetailsDTO(final Event event) {
-        final List<Option> options = event.getOptions();
-        final List<List<ChartPointDTO>> priceHistories = lmsrPriceHistories((LmsrEvent) event);
-
-        final List<OptionDTO> optionDTOs = new ArrayList<>();
-        for (int i = 0; i < options.size(); i++) {
-            final Option option = options.get(i);
-            optionDTOs.add(new OptionDTO(option.getName(), option.getSharesBought(), event.getOptionProbability(i), priceHistories.get(i)));
-        }
-
-        final List<TransactionDTO> transactionDTOs = new ArrayList<>();
-        for (final Transaction tx : event.getTransactions()) {
-            transactionDTOs.add(new TransactionDTO(tx.getUserName(), tx.getOptionName(), tx.getQuantity(), tx.getPricePaid(), tx.getCommissionPaid(), tx.getTimestamp()));
-        }
-
-        return new LmsrEventDetailsDTO(
-            event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
-            event.getStatus().name(), event.getAccountBalance(), event.getTotalCommissionCollected(),
-            optionDTOs, transactionDTOs, event.getWinningOptionName(), event.getCommissionPaidByUserMap(),
-            eventMarketMakers.get(event.getName())
-        );
-    }
-
-    private OrderBookEventDetailsDTO mapOrderBookDetailsDTO(final OrderBookEvent event) {
-        final List<OptionBookDTO> optionBooks = new ArrayList<>();
-        final List<Option> options = event.getOptions();
-        for (int i = 0; i < options.size(); i++) {
-            final Option option = options.get(i);
-            final MarketQuote quote = event.getQuote(i);
-            final List<OrderDTO> bids = toOrderDTOs(event.getMarket().getBook(i).bestBuyOrdersFirst());
-            final List<OrderDTO> asks = toOrderDTOs(event.getMarket().getBook(i).bestSellOrdersFirst());
-            optionBooks.add(new OptionBookDTO(option.getName(), quote.getLast(), quote.getBid(), quote.getAsk(), quote.getMid(), quote.getSpread(), bids, asks, toChartPoints(event.getMarket().getBook(i).getPriceHistory())));
-        }
-
-        final boolean closed = event.getStatus() == EventStatus.CLOSED;
-        final List<ParticipantHoldingDTO> participants = new ArrayList<>();
-        for (final String participantName : event.getParticipants()) {
-            final List<Integer> holdings = new ArrayList<>();
-            final List<Double> paidByOption = new ArrayList<>();
-            double estimatedValue = 0.0;
-            for (int i = 0; i < options.size(); i++) {
-                final int quantity = event.getHoldings().get(participantName, i);
-                holdings.add(quantity);
-                paidByOption.add(event.getSpentOnOption(participantName, i));
-                final MarketQuote quote = event.getQuote(i);
-                final Double priceEstimate = quote.getMid() != null ? quote.getMid() : quote.getLast();
-                estimatedValue += quantity * (priceEstimate != null ? priceEstimate : event.getD() / 2.0);
-            }
-            final double commissionPaid = event.getCommissionPaidBy(participantName);
-            final Double profitOrLoss = closed ? event.getProfitOrLoss(participantName) : null;
-            participants.add(new ParticipantHoldingDTO(participantName, holdings, paidByOption, estimatedValue, commissionPaid, profitOrLoss));
-        }
-
-        return new OrderBookEventDetailsDTO(
-            event.getName(), event.getDescription(), event.getCommission(), event.getCommissionType().name(),
-            event.getStatus().name(), event.getAccountBalance(), event.getD(), event.isAllowMint(),
-            optionBooks, participants, event.getWinningOptionName(),
-            eventMarketMakers.get(event.getName())
-        );
-    }
-
-    /**
-     * Reconstructs each LMSR option's price after every trade, for the price-over-time chart.
-     * <p>
-     * An LMSR price depends only on how many shares of each option have been bought, so replaying
-     * the event's transactions in order and re-asking the event for its prices at each step
-     * reproduces the whole history exactly - there is no need to have stored it as trading happened.
-     * The shares are restored afterwards, so this read-only query leaves the event untouched.
-     *
-     * @return one list of points per option, in option order, each starting at the opening price
-     */
-    private List<List<ChartPointDTO>> lmsrPriceHistories(final LmsrEvent event) {
-        final List<Option> options = event.getOptions();
-        final List<List<ChartPointDTO>> histories = new ArrayList<>();
-        for (int i = 0; i < options.size(); i++) {
-            histories.add(new ArrayList<>());
-        }
-
-        // Replayed in a local array and fed through the event's pure price function, so nothing in
-        // the live event is touched by what is only a read.
-        final int[] shares = new int[options.size()];
-        final List<Transaction> transactions = event.getTransactions();
-
-        // The opening price of every option, before anyone traded.
-        final LocalDateTime start = transactions.isEmpty() ? LocalDateTime.now() : transactions.get(0).getTimestamp();
-        for (int i = 0; i < options.size(); i++) {
-            histories.get(i).add(new ChartPointDTO(start, event.probabilityAt(shares, i)));
-        }
-
-        for (final Transaction tx : transactions) {
-            for (int i = 0; i < options.size(); i++) {
-                if (options.get(i).getName().equals(tx.getOptionName())) {
-                    shares[i] += tx.getQuantity();
-                }
-            }
-            for (int i = 0; i < options.size(); i++) {
-                histories.get(i).add(new ChartPointDTO(tx.getTimestamp(), event.probabilityAt(shares, i)));
-            }
-        }
-        return histories;
-    }
-
-    /** Converts the order book's recorded traded prices into plottable points. */
-    private List<ChartPointDTO> toChartPoints(final List<PricePoint> points) {
-        final List<ChartPointDTO> result = new ArrayList<>();
-        for (final PricePoint point : points) {
-            result.add(new ChartPointDTO(point.at(), point.price()));
-        }
-        return result;
-    }
-
-    private List<OrderDTO> toOrderDTOs(final List<Order> orders) {
-        final List<OrderDTO> result = new ArrayList<>();
-        for (final Order order : orders) {
-            result.add(new OrderDTO(order.getUserName(), order.getQuantity(), order.getPrice()));
-        }
-        return result;
-    }
-
-    private boolean isPathOnlyEnglishCharactersAndStandardSymbols(String path) {
-        for (char c : path.toCharArray()) {
-            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || 
-                  c == '\\' || c == '/' || c == '.' || c == ':' || c == '_' || c == '-' || c == ' ')) {
-                return false;
-            }
-        }
-        return true;
     }
 }

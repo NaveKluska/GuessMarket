@@ -4,6 +4,7 @@ import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
 import guessmarket.engine.models.Option;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -105,5 +106,41 @@ public class OrderBookEvent extends Event {
     @Override
     public double calculateCost(int optionIndex, int quantity) {
         throw new UnsupportedOperationException("Order Book trading goes through submitOrder, not calculateCost.");
+    }
+
+    @Override
+    public double calculateOpeningCost() {
+        return initial * (double) d;
+    }
+
+    @Override
+    public String openingCostLabel() {
+        return "initial stock";
+    }
+
+    @Override
+    public void applyOpening(final String mmName, final double amountPaid) {
+        increaseAccountBalance(amountPaid);
+        final double costPerOption = amountPaid / getOptions().size();
+        for (int i = 0; i < getOptions().size(); i++) {
+            holdings.increase(mmName, i, initial);
+            recordSpentOnOption(mmName, i, costPerOption);
+        }
+        recordSpent(mmName, amountPaid);
+        addParticipant(mmName);
+    }
+
+    @Override
+    public List<Map.Entry<String, Double>> winningPayouts(final int winningOptionIndex) {
+        final List<Map.Entry<String, Double>> payouts = new ArrayList<>();
+        for (final Map.Entry<String, Integer> holder : holdings.holdersOf(winningOptionIndex).entrySet()) {
+            payouts.add(Map.entry(holder.getKey(), holder.getValue() * (double) d));
+        }
+        return payouts;
+    }
+
+    @Override
+    public void recordPayoutReceived(final String userName, final double amount) {
+        recordReceived(userName, amount);
     }
 }

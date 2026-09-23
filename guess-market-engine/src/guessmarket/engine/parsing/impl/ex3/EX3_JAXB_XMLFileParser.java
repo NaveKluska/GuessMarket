@@ -53,11 +53,6 @@ public class EX3_JAXB_XMLFileParser implements FileParser {
     }
 
     @Override
-    public String getFileType() {
-        return "XML file (Ex3)";
-    }
-
-    @Override
     public List<Event> parse(InputStream xml) throws Exception {
         GuessMarket guessMarket;
         try {

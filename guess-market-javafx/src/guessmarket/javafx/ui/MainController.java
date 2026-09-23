@@ -161,7 +161,8 @@ public class MainController {
         skinCombo.getSelectionModel().select(DEFAULT_SKIN);
         skinCombo.setOnAction(e -> applySkin(skinCombo.getValue()));
 
-        loadFileButton.setOnAction(event -> onLoadFileClicked());
+        // loadFileButton wiring removed along with onLoadFileClicked() below - see that comment
+        // for why.
     }
 
     /**
@@ -193,7 +194,13 @@ public class MainController {
     }
 
     // ---------------------------------------------------------------- loading
-
+    //
+    // onLoadFileClicked() and describeFailure() used to live here - Ex2's local
+    // "pick a file, call engine.loadData()" flow. Superseded by Ex3's upload flow (the client
+    // never holds its own engine at all, it uploads to the server over HTTP instead), and
+    // engine.loadData() itself was removed from MarketEngine for the same reason.
+    // Kept here for reference rather than deleted; not compiled, not called from anywhere.
+    /*
     private void onLoadFileClicked() {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Load Guess Market events file");
@@ -265,6 +272,7 @@ public class MainController {
     private String describeFailure(Throwable exception) {
         return (exception != null && exception.getMessage() != null) ? exception.getMessage() : "An unknown error occurred while loading the file.";
     }
+    */
 
     private void showError(String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);

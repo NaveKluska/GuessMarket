@@ -7,6 +7,7 @@ import guessmarket.dto.UserSummaryDTO;
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.orderbook.OrderSide;
 
+import java.io.InputStream;
 import java.util.List;
 
 /**
@@ -16,27 +17,47 @@ import java.util.List;
 public interface MarketEngine {
 
     /**
-     * Loads the system data from an XML file.
-     *
-     * @param filePath the path to the XML file containing the events
-     * @throws Exception if loading or parsing fails
-     */
-    void loadData(String filePath) throws Exception;
-
-    /**
      * Retrieves a summary of all events currently loaded in the system.
      *
      * @return a list of EventSummaryDTOs representing all events
      */
     List<EventSummaryDTO> getAllEvents();
 
-    List<EventSummaryDTO> getActiveEvents();
+    /**
+     * Parses an uploaded XML file and adds its events to the pool - on top of what is already
+     * there, never replacing it. The uploader becomes the Market Maker of every event in the file.
+     *
+     * @param uploaderName the user who uploaded the file, who becomes MM of every event in it
+     * @param xml          the raw file content, unread - encoding is handled by the parser itself
+     * @throws Exception if the uploader is unknown, the file is invalid, or any event's name is
+     *                    already taken by an event from an earlier upload
+     */
+    void addEventsFromUpload(String uploaderName, InputStream xml) throws Exception;
 
     /**
      * Retrieves a summary of all users currently loaded in the system, including which
      * currently-active events each one is participating in.
      */
     List<UserSummaryDTO> getAllUsers();
+
+    /**
+     * Registers a brand-new user under this name, with a starting balance of zero. Called once,
+     * the first time someone logs in - there is no separate "create account" step.
+     *
+     * @param name the username to register - must not already be taken (case-insensitively)
+     * @throws Exception if the name is empty or already taken
+     */
+    void registerUser(String name) throws Exception;
+
+    /**
+     * Adds funds to an existing user's balance. The only way a user's balance can ever increase
+     * without trading - everyone starts at zero, so this is how money enters the system at all.
+     *
+     * @param userName the user depositing funds
+     * @param amount   the amount to add - must be positive
+     * @throws Exception if the user is unknown or the amount is not positive
+     */
+    void depositCash(String userName, double amount) throws Exception;
 
     /**
      * Retrieves detailed status and information for a specific event.
@@ -94,47 +115,57 @@ public interface MarketEngine {
     void submitOrder(String userName, String eventName, int optionIndex, OrderSide side, double price, int quantity) throws Exception;
 
     /**
-     * Creates a brand-new event from scratch and makes the creating user its Market Maker.
+     * Creates a brand-new LMSR event from scratch and makes the creating user its Market Maker.
      * The event starts NOT_ACTIVE like any loaded one, so the creator still has to open it (and
-     * pay the subsidy or initial allocation) before trading can happen.
+     * pay the initial subsidy) before trading can happen.
      * <p>
      * Inputs are validated to the same rules the file parser applies, so an event created here
-     * cannot be less valid than one loaded from XML.
+     * cannot be less valid than one loaded from XML. The name must already be trimmed - it is the
+     * key every later call (openEvent, closeEvent, buyShares...) uses to find this event again, so
+     * there is no silent whitespace-trimming here to accidentally drift from what the caller has.
      *
      * @param creatorName    the user creating the event, who becomes its Market Maker
-     * @param name           the event's display name
+     * @param name           the event's display name - must not be empty or padded with whitespace
      * @param description    the event's description
      * @param commission     the commission percentage
      * @param commissionType whether commission is taken on purchase or on close
      * @param optionNames    the option names - exactly two, non-empty and distinct
-     * @param method         the trading method and its settings
-     * @return the new event's name
-     * @throws Exception if the creator is unknown or blocked, the name is already taken, or any detail is invalid
+     * @param b              the LMSR liquidity parameter - must be positive
+     * @throws Exception if the creator is unknown or blocked, the name is invalid or already taken, or any detail is invalid
      */
-    String createEvent(String creatorName, String name, String description, int commission,
-                    CommissionType commissionType, List<String> optionNames,
-                    MarketMethodSpec method) throws Exception;
+    void createLmsrEvent(String creatorName, String name, String description, int commission, CommissionType commissionType, List<String> optionNames, int b) throws Exception;
 
     /**
-     * Saves the current system state to an external file.
+     * Creates a brand-new Order Book event from scratch and makes the creating user its Market Maker.
+     * The event starts NOT_ACTIVE like any loaded one, so the creator still has to open it (and
+     * pay for the initial share allocation) before trading can happen.
+     * <p>
+     * Inputs are validated to the same rules the file parser applies, so an event created here
+     * cannot be less valid than one loaded from XML. The name must already be trimmed - see
+     * {@link #createLmsrEvent} for why.
      *
-     * @param filePath the full path (without extension) to save the state to
-     * @throws Exception if saving fails
+     * @param creatorName    the user creating the event, who becomes its Market Maker
+     * @param name           the event's display name - must not be empty or padded with whitespace
+     * @param description    the event's description
+     * @param commission     the commission percentage
+     * @param commissionType whether commission is taken on purchase or on close
+     * @param optionNames    the option names - exactly two, non-empty and distinct
+     * @param allowMint      whether two opposing buy orders whose prices together reach d may mint new shares
+     * @param initial        how many shares of every option the Market Maker buys when opening the event
+     * @param d              the base value a winning share pays out at close - must be positive
+     * @throws Exception if the creator is unknown or blocked, the name is invalid or already taken, or any detail is invalid
      */
-    void saveState(String filePath) throws Exception;
+    void createOrderBookEvent(String creatorName, String name, String description, int commission, CommissionType commissionType, List<String> optionNames, boolean allowMint, int initial, int d) throws Exception;
 
-    /**
-     * Loads a previously saved system state from a file.
-     *
-     * @param filePath the full path (without extension) to load the state from
-     * @throws Exception if loading fails
-     */
-    void loadState(String filePath) throws Exception;
-
-    /**
-     * Exits the system and handles any required shutdown or state-saving procedures.
-     *
-     * @throws Exception if an error occurs during shutdown
-     */
-    void shutdown() throws Exception;
+    // Chat bonus (Ex3 bonus #1, 5 points) - deliberately not part of the real interface yet.
+    // A decision, not a gap: the base 11 methods are complete without it. Uncomment and implement
+    // only if/when the bonus is actually being built - until then these are commented out (not
+    // stubbed) specifically so MarketEngineImpl is never forced to fake an implementation of
+    // something not yet decided.
+    //
+    // /** Posts a chat message, visible to every connected user. */
+    // void postChatMessage(String userName, String message) throws Exception;
+    //
+    // /** Returns the full chat log, oldest first - polled the same way events/users already are. */
+    // List<ChatMessageDTO> getChatMessages();
 }
