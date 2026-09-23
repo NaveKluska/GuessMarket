@@ -5,10 +5,12 @@ import guessmarket.engine.core.factory.EventFactory;
 import guessmarket.engine.core.mapping.DtoMapper;
 import guessmarket.engine.core.settlement.EventCloser;
 import guessmarket.engine.core.trading.OrderBookTradeExecutor;
+import guessmarket.dto.ChatMessageDTO;
 import guessmarket.dto.EventDetailsDTO;
 import guessmarket.dto.EventSummaryDTO;
 import guessmarket.dto.ReceiptDTO;
 import guessmarket.dto.UserSummaryDTO;
+import guessmarket.engine.models.ChatMessage;
 import guessmarket.engine.models.CommissionType;
 import guessmarket.engine.models.Event;
 import guessmarket.engine.models.EventStatus;
@@ -23,10 +25,12 @@ import guessmarket.engine.billing.api.CommissionCalculator;
 import guessmarket.engine.parsing.api.FileParser;
 
 import java.io.InputStream;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 // ============================================================================
 // DECISIONS MADE
@@ -54,6 +58,8 @@ import java.util.concurrent.ConcurrentHashMap;
 //   reserved by another open ask - holdings don't move until a real fill.
 // - EventCreator validation skips name-uniqueness - that check only matters
 //   together with the write, so it happens atomically in registerCreatedEvent.
+// - Chat messages are trimmed-and-rejected-if-empty like a description, not
+//   rejected-if-padded like a name - a message is content, not a lookup key.
 // ============================================================================
 
 public class MarketEngineImpl implements MarketEngine
@@ -65,6 +71,7 @@ public class MarketEngineImpl implements MarketEngine
     private final CommissionCalculator commissionCalculator;
     private final OrderBookTradeExecutor orderBookTradeExecutor;
     private final EventCloser eventCloser;
+    private final List<ChatMessage> chatMessages;
 
     public MarketEngineImpl(final FileParser parser, final CommissionCalculator commissionCalculator)
     {
@@ -75,6 +82,7 @@ public class MarketEngineImpl implements MarketEngine
         this.eventMarketMakers = new ConcurrentHashMap<>();
         this.orderBookTradeExecutor = new OrderBookTradeExecutor(this.users, this.eventMarketMakers, this.commissionCalculator);
         this.eventCloser = new EventCloser(this.users, this.commissionCalculator);
+        this.chatMessages = new CopyOnWriteArrayList<>();
     }
 
     @Override
@@ -323,6 +331,26 @@ public class MarketEngineImpl implements MarketEngine
         final List<Option> options = EventFactory.buildOptions(optionNames);
         final Event created = EventFactory.buildOrderBookEvent(name, description.trim(), commission, commissionType, options, allowMint, initial, d);
         registerCreatedEvent(created, creatorName, creator);
+    }
+
+    @Override
+    public void postChatMessage(final String userName, final String message) throws Exception
+    {
+        requireUser(userName);
+        if (message == null || message.trim().isEmpty()) {
+            throw new IllegalArgumentException("Chat message cannot be empty.");
+        }
+        chatMessages.add(new ChatMessage(userName, message.trim(), LocalDateTime.now()));
+    }
+
+    @Override
+    public List<ChatMessageDTO> getChatMessages()
+    {
+        final List<ChatMessageDTO> result = new ArrayList<>();
+        for (final ChatMessage message : chatMessages) {
+            result.add(new ChatMessageDTO(message.userName(), message.message(), message.at()));
+        }
+        return result;
     }
 
     // ============================================================================

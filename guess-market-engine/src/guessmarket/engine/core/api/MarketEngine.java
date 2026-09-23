@@ -1,5 +1,6 @@
 package guessmarket.engine.core.api;
 
+import guessmarket.dto.ChatMessageDTO;
 import guessmarket.dto.EventDetailsDTO;
 import guessmarket.dto.EventSummaryDTO;
 import guessmarket.dto.ReceiptDTO;
@@ -157,15 +158,17 @@ public interface MarketEngine {
      */
     void createOrderBookEvent(String creatorName, String name, String description, int commission, CommissionType commissionType, List<String> optionNames, boolean allowMint, int initial, int d) throws Exception;
 
-    // Chat bonus (Ex3 bonus #1, 5 points) - deliberately not part of the real interface yet.
-    // A decision, not a gap: the base 11 methods are complete without it. Uncomment and implement
-    // only if/when the bonus is actually being built - until then these are commented out (not
-    // stubbed) specifically so MarketEngineImpl is never forced to fake an implementation of
-    // something not yet decided.
-    //
-    // /** Posts a chat message, visible to every connected user. */
-    // void postChatMessage(String userName, String message) throws Exception;
-    //
-    // /** Returns the full chat log, oldest first - polled the same way events/users already are. */
-    // List<ChatMessageDTO> getChatMessages();
+    /**
+     * Posts a chat message, visible to every connected user.
+     *
+     * @param userName the user posting the message - must be a registered user
+     * @param message  the message text - must not be empty
+     * @throws Exception if the user is unknown or the message is empty
+     */
+    void postChatMessage(String userName, String message) throws Exception;
+
+    /**
+     * Returns the full chat log, oldest first - polled the same way events/users already are.
+     */
+    List<ChatMessageDTO> getChatMessages();
 }
