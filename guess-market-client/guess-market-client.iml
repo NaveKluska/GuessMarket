@@ -6,7 +6,6 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
     </content>
     <orderEntry type="inheritedJdk" />
-    <orderEntry type="module" module-name="guess-market-javafx" />
     <orderEntry type="module" module-name="guess-market-dto" />
     <orderEntry type="library" name="lib" level="project" />
     <orderEntry type="library" name="gson-2.11.0" level="project" />
