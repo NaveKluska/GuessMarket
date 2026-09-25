@@ -3,6 +3,7 @@
   <component name="CompilerConfiguration">
     <excludeFromCompile>
       <directory url="file://$PROJECT_DIR$/guess-market-console/src" includeSubdirectories="true" />
+      <directory url="file://$PROJECT_DIR$/guess-market-javafx/src" includeSubdirectories="true" />
     </excludeFromCompile>
   </component>
 </project>
