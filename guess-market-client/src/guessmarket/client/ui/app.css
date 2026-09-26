@@ -1,0 +1,637 @@
+/* ---------------------------------------------------------------------------------------------
+   Colour tokens (JavaFX "looked-up colours").
+   Every colour in this stylesheet is expressed as one of these names rather than a raw literal,
+   which is what makes the skin bonus possible: a theme stylesheet only has to redefine this block
+   to restyle the whole application, instead of duplicating all 400 lines below.
+   Defined on .root rather than .app-root deliberately - a ComboBox popup is its own window and so
+   is NOT a descendant of the application root, and would not see tokens defined there.
+   --------------------------------------------------------------------------------------------- */
+.root {
+    /* surfaces */
+    -gm-surface: #ffffff;
+    -gm-bg-alt: #f3f4f8;
+    -gm-bg-soft: #f7f8fb;
+    -gm-chip: #e9ebf1;
+    -gm-chip-hover: #dfe2ea;
+
+    /* text */
+    -gm-text: #1a1d29;
+    -gm-text-muted: #5b6172;
+    -gm-text-faint: #8b90a0;
+
+    /* lines */
+    -gm-border: #e6e8ee;
+    -gm-border-strong: #d8dbe3;
+    -gm-border-toolbar: #dadde6;
+    -gm-border-control: #c3c7d4;
+    -gm-border-focus: #b8bdd6;
+
+    /* accent */
+    -gm-accent: #4c5fd5;
+    -gm-accent-dark: #3f50c0;
+    -gm-accent-soft: #eef0fd;
+    -gm-accent-tint: rgba(76,95,213,0.14);
+
+    /* money and outcomes */
+    -gm-positive: #1f9d68;
+    -gm-positive-dark: #188055;
+    -gm-positive-soft: rgba(31,157,104,0.12);
+    -gm-negative: #c8443f;
+    -gm-negative-soft: rgba(200,68,63,0.12);
+
+    /* category colours for the pills */
+    -gm-lmsr: #7c3aed;
+    -gm-lmsr-soft: #f3e8ff;
+    -gm-book: #a8720d;
+    -gm-book-soft: rgba(168,114,13,0.14);
+    -gm-mm: #db2777;
+    -gm-mm-soft: rgba(219,39,119,0.12);
+    -gm-account: #0f9488;
+    -gm-account-soft: #e6f7f5;
+}
+
+.app-root {
+    -fx-font-family: "Segoe UI", sans-serif;
+    -fx-background-color: -gm-surface;
+}
+
+.toolbar {
+    -fx-background-color: -gm-bg-alt;
+    -fx-border-color: -gm-border-toolbar transparent transparent transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.brand-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text;
+}
+
+.filepath-label {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: -gm-text-muted;
+    -fx-background-color: -gm-chip;
+    -fx-background-radius: 6;
+    -fx-padding: 5 9 5 9;
+    -fx-text-overrun: ellipsis;
+}
+
+/* Bonus: the animations switch. Shaped like the pills used elsewhere and tinted with the accent
+   colour while on, so whether animations are currently enabled is obvious at a glance rather than
+   depending on spotting a small tick. */
+.animations-toggle {
+    -fx-background-color: -gm-chip;
+    -fx-background-radius: 99;
+    -fx-padding: 5 12 5 10;
+    -fx-cursor: hand;
+}
+.animations-toggle .label {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text-muted;
+}
+.animations-toggle:hover {
+    -fx-background-color: -gm-chip-hover;
+}
+.animations-toggle > .box {
+    -fx-background-color: -gm-surface;
+    -fx-border-color: -gm-border-control;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 2;
+}
+.animations-toggle:selected {
+    -fx-background-color: -gm-accent-tint;
+}
+.animations-toggle:selected .label {
+    -fx-text-fill: -gm-accent;
+}
+.animations-toggle:selected > .box {
+    -fx-background-color: -gm-accent;
+    -fx-border-color: -gm-accent;
+}
+.animations-toggle:selected > .box > .mark {
+    -fx-background-color: white;
+}
+
+.primary-button {
+    -fx-background-color: -gm-accent;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 6;
+    -fx-padding: 7 14 7 14;
+}
+
+.primary-button:hover {
+    -fx-background-color: -gm-accent-dark;
+}
+
+/* Closing an event is a decisive, resolving action - give it its own bold color so it doesn't
+   read as just another gray default button. */
+.close-button {
+    -fx-background-color: -gm-positive;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-background-radius: 6;
+    -fx-padding: 7 14 7 14;
+}
+
+.close-button:hover {
+    -fx-background-color: -gm-positive-dark;
+}
+
+.main-tabs .tab-header-area {
+    -fx-padding: 4 16 0 16;
+}
+
+.filter-bar {
+    -fx-background-color: -gm-surface;
+    -fx-border-color: -gm-border transparent transparent transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.filter-label {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text-faint;
+}
+
+.detail-scroll {
+    -fx-background-color: transparent;
+}
+
+/* Selected list row: a light tint + left accent border instead of the default hard-to-read blue fill.
+   Scoped to .main-list specifically (the Events/Users lists) - NOT the bare .list-cell selector, because
+   a ComboBox's dropdown popup is also built from .list-cell internally, and this style would otherwise
+   leak into every dropdown and clash with its own arrow/border chrome. */
+.main-list .list-cell:filled:selected,
+.main-list .list-cell:filled:selected:focused,
+.main-list:focused .list-cell:filled:selected {
+    -fx-background-color: -gm-accent-soft;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent transparent transparent -gm-accent;
+    -fx-border-width: 0 0 0 4;
+}
+
+/* ComboBox: one consistent look for the box, its arrow button and its dropdown popup. */
+.combo-box {
+    -fx-background-color: -gm-surface;
+    -fx-border-color: -gm-border-strong;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+
+.combo-box:hover {
+    -fx-border-color: -gm-border-focus;
+}
+
+.combo-box:focused, .combo-box:showing {
+    -fx-border-color: -gm-accent;
+}
+
+.combo-box .arrow-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 0 6 6 0;
+}
+
+.combo-box .arrow {
+    -fx-background-color: -gm-text-muted;
+}
+
+.combo-box-popup .list-view {
+    -fx-border-color: -gm-border-strong;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
+
+.combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: -gm-bg-alt;
+}
+
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: -gm-accent-soft;
+    -fx-text-fill: -gm-text;
+}
+
+.detail-pane {
+    -fx-padding: 18;
+    -fx-spacing: 10;
+}
+
+.placeholder-label {
+    -fx-text-fill: -gm-text-faint;
+    -fx-font-size: 13px;
+}
+
+/* A small "ghost button" look for a hint that's really a call to action - a bordered chip in the
+   app's accent color, rather than a plain gray caption line easy to miss. */
+.hint-chip {
+    -fx-text-fill: -gm-accent;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-border-color: -gm-accent;
+    -fx-border-width: 1;
+    -fx-border-radius: 99;
+    -fx-background-radius: 99;
+    -fx-padding: 4 14 4 14;
+}
+
+/* event list cells */
+.event-cell-name {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text;
+}
+
+.event-cell-meta {
+    -fx-font-size: 11px;
+    -fx-text-fill: -gm-text-faint;
+}
+
+.pill {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-padding: 2 7 2 7;
+    -fx-background-radius: 99;
+}
+
+.pill-active { -fx-background-color: -gm-positive-soft; -fx-text-fill: -gm-positive; }
+.pill-notactive { -fx-background-color: -gm-chip; -fx-text-fill: -gm-text-faint; }
+.pill-closed { -fx-background-color: -gm-negative-soft; -fx-text-fill: -gm-negative; }
+.pill-lmsr { -fx-background-color: -gm-accent-soft; -fx-text-fill: -gm-accent; }
+.pill-ob { -fx-background-color: -gm-book-soft; -fx-text-fill: -gm-book; }
+.pill-winner { -fx-background-color: -gm-positive; -fx-text-fill: white; }
+.pill-commission { -fx-background-color: -gm-lmsr-soft; -fx-text-fill: -gm-lmsr; }
+.pill-account { -fx-background-color: -gm-account-soft; -fx-text-fill: -gm-account; }
+.pill-mm { -fx-background-color: -gm-mm-soft; -fx-text-fill: -gm-mm; }
+.pill-mm-tag { -fx-background-color: -gm-accent; -fx-text-fill: white; }
+.pill-you { -fx-background-color: -gm-accent; -fx-text-fill: white; }
+
+/* Ex3 addition: the logged-in user's own row in the Users list, so it's findable at a glance in
+   a long list without reading every name - not just the "YOU" pill, which is easy to miss. */
+.self-row {
+    -fx-background-color: -gm-accent-soft;
+    -fx-background-radius: 6;
+}
+
+/* detail header */
+.detail-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text;
+}
+
+.detail-desc {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: -gm-text-muted;
+}
+
+.meta-label, .stat-label {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text-faint;
+}
+
+.meta-value {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text;
+}
+
+/* An account balance reads as real money: same weight as meta-value, colored like the app's other money figures. */
+.meta-value-money {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-positive;
+}
+
+/* A standalone stat card, used everywhere a Status/Market Maker/Balance/etc. fact needs to read as
+   its own separate, flashy object rather than a segment glued into one flat gray strip. */
+.stat-tile {
+    -fx-background-color: -gm-surface;
+    -fx-border-color: -gm-border;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 10 18 10 18;
+}
+
+.section-label {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text-faint;
+    -fx-padding: 8 0 2 0;
+}
+
+/* A titled, bordered card - used for the Users tab's two headline sections, so the title reads as a
+   heading (a header bar of its own) rather than blending into the content below it. */
+.section-card {
+    -fx-border-color: -gm-border-strong;
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-background-color: -gm-surface;
+    -fx-background-radius: 10;
+}
+
+.section-card-header {
+    -fx-background-color: -gm-bg-alt;
+    -fx-background-radius: 10 10 0 0;
+    -fx-border-color: transparent transparent -gm-border-strong transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 10 14 10 14;
+}
+
+.section-card-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text;
+}
+
+.section-card-body {
+    -fx-padding: 14;
+}
+
+/* The event description gets its own boxed-off area, with a small caption, so it reads as
+   "this is the description" rather than blending into the rest of the header. */
+.description-box {
+    -fx-background-color: -gm-bg-soft;
+    -fx-border-color: -gm-border;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+/* price cards (LMSR) */
+.price-card {
+    -fx-background-color: -gm-surface;
+    -fx-border-color: -gm-border;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+.price-card-value {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 27px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-positive;
+}
+
+.price-card-chance {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: -gm-text-muted;
+}
+
+.price-card-shares {
+    -fx-font-size: 12.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text;
+}
+
+/* A price card the user has clicked to trade - the indigo accent used everywhere else in the app
+   for "this is the selected/active thing" (list selection, focused ComboBox border). */
+.price-card-selected {
+    -fx-background-color: -gm-surface;
+    -fx-border-color: -gm-accent;
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+/* Order Book "your position" cards: shares held is the bold headline, amount paid a smaller money-green caption. */
+.position-card-shares {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 19px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text;
+}
+
+.position-card-paid {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-positive;
+}
+
+/* order book panels */
+.book-panel {
+    -fx-background-color: -gm-surface;
+    -fx-border-color: -gm-border;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+}
+
+.book-panel-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text;
+}
+
+.stats-row {
+    -fx-spacing: 1;
+    -fx-background-color: -gm-border;
+    -fx-padding: 1 0 1 0;
+}
+
+.stat-box {
+    -fx-background-color: -gm-surface;
+    -fx-padding: 6 4 6 4;
+}
+
+.stat-value {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text;
+}
+
+.tradebox {
+    -fx-background-color: -gm-bg-alt;
+    -fx-background-radius: 6;
+    -fx-padding: 8;
+}
+
+.pl-positive {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-positive;
+}
+
+.pl-negative {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-negative;
+}
+
+.winner-banner {
+    -fx-background-color: -gm-positive-soft;
+    -fx-background-radius: 8;
+    -fx-border-color: -gm-positive;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+}
+
+.winner-banner-label {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-positive;
+}
+
+.price-card-winner {
+    -fx-background-color: -gm-surface;
+    -fx-border-color: -gm-positive;
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+.book-panel-winner {
+    -fx-background-color: -gm-surface;
+    -fx-border-color: -gm-positive;
+    -fx-border-width: 2;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Bonus: the price and balance charts.
+   Written entirely in terms of the colour tokens above, so a skin restyles the charts for free
+   rather than needing chart rules of its own.
+   --------------------------------------------------------------------------------------------- */
+.gm-chart {
+    -fx-background-color: transparent;
+    -fx-padding: 4 8 4 4;
+}
+
+.gm-chart .chart-plot-background {
+    -fx-background-color: -gm-bg-soft;
+}
+
+.gm-chart .chart-vertical-grid-lines,
+.gm-chart .chart-horizontal-grid-lines {
+    -fx-stroke: -gm-border;
+}
+
+.gm-chart .chart-vertical-zero-line,
+.gm-chart .chart-horizontal-zero-line {
+    -fx-stroke: -gm-border-strong;
+}
+
+.gm-chart .axis {
+    -fx-tick-label-fill: -gm-text-muted;
+    -fx-font-size: 10px;
+}
+
+.gm-chart .axis-label {
+    -fx-text-fill: -gm-text-faint;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.gm-chart .axis .axis-tick-mark,
+.gm-chart .axis .axis-minor-tick-mark {
+    -fx-stroke: -gm-border-strong;
+}
+
+.gm-chart .chart-legend {
+    -fx-background-color: transparent;
+    -fx-padding: 2 0 0 0;
+}
+
+.gm-chart .chart-legend-item {
+    -fx-text-fill: -gm-text-muted;
+    -fx-font-size: 11px;
+}
+
+/* Two series is the norm here (an event always has exactly two options), so the first two colours
+   are the ones that matter - picked for contrast in every skin. */
+.gm-chart .default-color0.chart-series-line { -fx-stroke: -gm-accent; -fx-stroke-width: 2px; }
+.gm-chart .default-color1.chart-series-line { -fx-stroke: -gm-book; -fx-stroke-width: 2px; }
+
+.gm-chart .default-color0.chart-line-symbol,
+.gm-chart .default-color0.chart-legend-item-symbol {
+    -fx-background-color: -gm-accent, -gm-surface;
+    -fx-background-insets: 0, 2;
+    -fx-padding: 3px;
+}
+
+.gm-chart .default-color1.chart-line-symbol,
+.gm-chart .default-color1.chart-legend-item-symbol {
+    -fx-background-color: -gm-book, -gm-surface;
+    -fx-background-insets: 0, 2;
+    -fx-padding: 3px;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Ex3 additions - everything above this line is Ex2's stylesheet, unchanged. Ex2 had no login
+   screen and no chat, so these are new; everything else reuses the classes above as-is.
+   --------------------------------------------------------------------------------------------- */
+.login-root {
+    -fx-background-color: -gm-surface;
+}
+
+.login-card {
+    -fx-background-color: -gm-surface;
+}
+
+.login-title {
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text;
+}
+
+.login-subtitle {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: -gm-text-muted;
+}
+
+.login-error {
+    -fx-text-fill: -gm-negative;
+    -fx-font-size: 11.5px;
+    -fx-font-weight: bold;
+}
+
+.chat-time {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 10.5px;
+    -fx-text-fill: -gm-text-faint;
+}
+
+.chat-user {
+    -fx-font-size: 12.5px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-accent;
+}
+
+.chat-message-text {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: -gm-text;
+}
+
+/* WhatsApp-style day divider between chat messages - a small centered chip, not a full row, so
+   it reads as a separator rather than a message of its own. */
+.chat-date-divider {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-text-faint;
+    -fx-background-color: -gm-chip;
+    -fx-background-radius: 99;
+    -fx-padding: 3 12 3 12;
+}
+
+/* Trade-history / order-book lines rendered as plain rows instead of Ex2's TableView. */
+.order-row {
+    -fx-font-family: "Consolas", monospace;
+    -fx-font-size: 11.5px;
+    -fx-text-fill: -gm-text-muted;
+}
+
+.participant-card {
+    -fx-background-color: -gm-surface;
+    -fx-border-color: -gm-border;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}

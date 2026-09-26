@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<!-- Ex2's own main.fxml, with the Ex3-only differences cut in: the toolbar gains the logged-in
+     user's name (Ex2 had no login), the Users tab gains a compact account/deposit box pinned
+     under the user list (Ex2 showed balance inline in the detail pane instead), and a Chat tab is
+     added (Ex2 had none). Everything else - the Events tab, the filter bar, the two-pane
+     list+detail layout - is unchanged from Ex2. -->
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="guessmarket.client.ui.MainController" styleClass="app-root"
+            stylesheets="@app.css">
+
+    <top>
+        <VBox styleClass="toolbar">
+            <BorderPane>
+                <padding><Insets top="8" right="16" bottom="2" left="16"/></padding>
+                <left>
+                    <Label fx:id="welcomeLabel" styleClass="filter-label" BorderPane.alignment="CENTER_LEFT"/>
+                </left>
+                <center>
+                    <Label text="Guess Market" styleClass="brand-title"/>
+                </center>
+            </BorderPane>
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <padding><Insets top="4" right="16" bottom="10" left="16"/></padding>
+                <Button fx:id="loadFileButton" text="Load File..." styleClass="primary-button"/>
+                <Label fx:id="filePathLabel" text="No file loaded" styleClass="filepath-label" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+            </HBox>
+        </VBox>
+    </top>
+
+    <center>
+        <TabPane tabClosingPolicy="UNAVAILABLE" styleClass="main-tabs">
+
+            <Tab text="Events">
+                <VBox>
+                    <HBox styleClass="filter-bar" spacing="14" alignment="CENTER_LEFT">
+                        <padding><Insets top="10" right="16" bottom="10" left="16"/></padding>
+                        <VBox spacing="3">
+                            <Label text="METHOD" styleClass="filter-label"/>
+                            <ComboBox fx:id="methodFilterCombo"/>
+                        </VBox>
+                        <VBox spacing="3">
+                            <Label text="STATUS" styleClass="filter-label"/>
+                            <ComboBox fx:id="statusFilterCombo"/>
+                        </VBox>
+                        <VBox spacing="3">
+                            <Label text="COMMISSION" styleClass="filter-label"/>
+                            <ComboBox fx:id="commissionFilterCombo"/>
+                        </VBox>
+                    </HBox>
+
+                    <SplitPane dividerPositions="0.32" VBox.vgrow="ALWAYS">
+                        <ListView fx:id="eventListView" styleClass="main-list" minWidth="210"/>
+                        <ScrollPane fitToWidth="true" styleClass="detail-scroll" minWidth="440">
+                            <VBox fx:id="eventDetailPane" styleClass="detail-pane">
+                                <Label text="Select an event to see its details." styleClass="placeholder-label"/>
+                            </VBox>
+                        </ScrollPane>
+                    </SplitPane>
+                </VBox>
+            </Tab>
+
+            <Tab text="Account">
+                <SplitPane dividerPositions="0.28">
+                    <SplitPane orientation="VERTICAL" dividerPositions="0.5">
+                        <VBox styleClass="section-card" minHeight="120">
+                            <HBox styleClass="section-card-header" alignment="CENTER">
+                                <Label text="Users" styleClass="section-card-title"/>
+                            </HBox>
+                            <ListView fx:id="userListView" styleClass="main-list" minWidth="200" VBox.vgrow="ALWAYS"/>
+                        </VBox>
+                        <!-- Tall enough to guarantee Balance/Blocked, the Deposit row, and a few
+                             Account History lines stay visible without scrolling at the floor -
+                             120 (like the Users list above) only fit the header and stat tiles. -->
+                        <ScrollPane fitToWidth="true" styleClass="detail-scroll" minHeight="300">
+                            <VBox fx:id="userAccountPane">
+                                <Label text="Select a user to see their account." styleClass="placeholder-label"/>
+                            </VBox>
+                        </ScrollPane>
+                    </SplitPane>
+                    <ScrollPane fitToWidth="true" styleClass="detail-scroll" minWidth="440">
+                        <VBox fx:id="userDetailPane" styleClass="detail-pane">
+                            <Label text="Select a user to see their details." styleClass="placeholder-label"/>
+                        </VBox>
+                    </ScrollPane>
+                </SplitPane>
+            </Tab>
+
+            <Tab text="Chat">
+                <BorderPane>
+                    <center>
+                        <ListView fx:id="chatListView" styleClass="main-list"/>
+                    </center>
+                    <bottom>
+                        <HBox spacing="8" styleClass="filter-bar">
+                            <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                            <TextField fx:id="chatMessageField" promptText="Type a message..." HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="sendChatButton" text="Send" styleClass="primary-button"/>
+                        </HBox>
+                    </bottom>
+                </BorderPane>
+            </Tab>
+
+        </TabPane>
+    </center>
+
+</BorderPane>

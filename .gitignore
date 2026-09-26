@@ -37,3 +37,6 @@ guess-market-server/build/
 
 # Scratch compile output used to smoke-test the client, not project state
 guess-market-client/build/
+
+# Sample XML files for manually testing the upload feature, not project state
+test-uploads/
