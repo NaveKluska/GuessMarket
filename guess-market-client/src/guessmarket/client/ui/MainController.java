@@ -25,15 +25,18 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
+import javafx.event.Event;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.Parent;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.StrokeType;
 import javafx.scene.text.Text;
+import javafx.scene.text.TextAlignment;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
@@ -43,6 +46,7 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -70,6 +74,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -146,6 +151,49 @@ public class MainController
     // -1 so the very first (possibly empty) chat fetch is never mistaken for "nothing changed".
     private int lastChatMessageCount = -1;
 
+    // ---------------------------------------------------------------- flicker gates
+    // Every poll tick fetches brand-new DTO instances even when nothing actually changed server
+    // side, so naively rebuilding a detail pane every second flickers whatever's selected/focused/
+    // scrolled inside it. Each of these caches the last value a pane was actually rebuilt from, so
+    // a tick that produced value-identical data can skip touching that pane's nodes entirely -
+    // null'd out whenever the pane goes back to its "nothing selected" placeholder, so reselecting
+    // afterwards is never mistaken for "unchanged".
+
+    /** eventDetailPane (Events tab) - getEventDetails() is a fresh fetch every tick, so this needs a
+     * real value-based comparison (eventDetailsEqual), not reference equality. */
+    private EventDetailsDTO lastRenderedEventDetail;
+
+    /** The Account tab's inline "Single event details and trade" box - rendered independently of
+     * buildUserDetail (see populateSingleEventBox) so it keeps refreshing every tick even while the
+     * surrounding Account Details rebuild below is skipped. Same value-based comparison as above -
+     * but unlike eventDetailPane (one fixed FXML pane, reused forever), the box itself is a brand
+     * new VBox instance every time buildUserDetail runs (switching which user's page you're on, or
+     * any real change to it). Gating purely on the fetched data was wrong: if it happened to equal
+     * whatever was last cached from a *different* box entirely (e.g. an event you had open while
+     * viewing your own page, now auto-reopened under someone else's), the gate would silently skip
+     * populating this new, still-empty box - looking exactly like the click did nothing. Tracking
+     * which box that data was actually rendered into is what makes a different box always render. */
+    private EventDetailsDTO lastRenderedInlineEventDetail;
+    private VBox lastPopulatedSingleEventBox;
+
+    /** userAccountPane / userDetailPane (Account tab) - both are built from whichever UserSummaryDTO
+     * instance is already selected in userListView, which only ever changes reference when
+     * applyUsers's own list-level check (userSummaryEquals) decided something did. So if it's
+     * literally the same instance as last render, nothing changed - reference equality suffices. */
+    private UserSummaryDTO lastRenderedAccountUser;
+    private UserSummaryDTO lastRenderedUserDetailUser;
+    /** buildUserDetail also iterates allEvents (participation cards) - allEvents itself is a fresh
+     * List instance every tick regardless of content, so this needs eventSummaryEquals, not
+     * reference equality. */
+    private List<EventSummaryDTO> lastRenderedUserDetailEvents = new ArrayList<>();
+
+    /** Which LMSR option card was last selected for a given event's Buy Shares panel, keyed by
+     * event name. A real trade is exactly the kind of change the gates above are meant to let
+     * through - interactiveLmsrCards is still rebuilt from scratch, which would otherwise silently
+     * reset "nothing selected" right after buying, along with the quantity/Buy controls it had
+     * unlocked. */
+    private final Map<String, Integer> selectedLmsrOptionByEvent = new HashMap<>();
+
     @FXML
     private void initialize()
     {
@@ -181,6 +229,12 @@ public class MainController
         refreshUsers();
 
         chatListView.setCellFactory(list -> new ChatCell());
+        // Chat is a passive log, not a pickable list like Events/Users - nothing reads its
+        // selection, so the only effect of leaving it selectable was a row lighting up on click
+        // for no reason. A capturing-phase filter on the ListView itself intercepts the press
+        // before the cell's own default selection handler sees it, so clicking never selects
+        // anything while scrolling (which isn't a MouseEvent at all) is untouched.
+        chatListView.addEventFilter(MouseEvent.MOUSE_PRESSED, Event::consume);
         sendChatButton.setOnAction(event -> handleSendChat());
         chatMessageField.setOnAction(event -> handleSendChat());
         refreshChat();
@@ -289,6 +343,19 @@ public class MainController
             && Double.compare(x.getAccountBalance(), y.getAccountBalance()) == 0;
     }
 
+    // Narrower than eventSummaryEquals on purpose: buildUserDetail's participation cards (see
+    // participationCard) only ever show an event's name/type/status/MM-tag, never its
+    // accountBalance/commission/description/options - and accountBalance in particular changes on
+    // every single trade against that event, which would otherwise force renderUserDetail's gate to
+    // treat any trade by anyone, anywhere, as a reason to rebuild this pane.
+    private boolean participationRelevantEquals(final EventSummaryDTO x, final EventSummaryDTO y)
+    {
+        return x.getName().equals(y.getName())
+            && x.getType().equals(y.getType())
+            && x.getStatus().equals(y.getStatus())
+            && x.getMarketMakerName().equals(y.getMarketMakerName());
+    }
+
     private List<EventSummaryDTO> filterEvents(final List<EventSummaryDTO> events)
     {
         final String method = methodFilterCombo.getValue();
@@ -330,6 +397,7 @@ public class MainController
     {
         if (selected == null) {
             eventDetailPane.getChildren().setAll(new Label("Select an event to see its details."));
+            lastRenderedEventDetail = null;
             return;
         }
         if (quiet && paneHasFocus(eventDetailPane)) {
@@ -378,7 +446,13 @@ public class MainController
 
     private void renderEventDetail(final EventDetailsDTO details)
     {
+        if (eventDetailsEqual(details, lastRenderedEventDetail)) {
+            return;
+        }
+        lastRenderedEventDetail = details;
+
         final Map<String, String> typedValues = captureFieldValues(eventDetailPane);
+        final Double scroll = captureScroll(eventDetailPane);
 
         final Runnable onChange = () -> reloadAndShowEvent(details.getName());
         // Read-only, exactly like Ex2's Events tab - trading happens on the Account tab instead.
@@ -389,6 +463,7 @@ public class MainController
         eventDetailPane.getChildren().setAll(nodes);
 
         restoreFieldValues(eventDetailPane, typedValues);
+        restoreScroll(eventDetailPane, scroll);
     }
 
     // A trade/open/close can change both this event's own detail and any user's balance or
@@ -492,16 +567,19 @@ public class MainController
     private VBox interactiveLmsrCards(final String eventId, final List<OptionDTO> options, final Runnable onChange, final boolean isSelf)
     {
         final List<VBox> cardNodes = new ArrayList<>();
-        final int[] selectedIndex = { -1 };
+        // Restores whichever card was selected before this rebuild (a Buy just made is exactly the
+        // kind of real change that triggers one) instead of always starting back at "nothing picked".
+        final Integer remembered = selectedLmsrOptionByEvent.get(eventId);
+        final int[] selectedIndex = { remembered != null && remembered < options.size() ? remembered : -1 };
 
         final Spinner<Integer> qtySpinner = new Spinner<>(1, 1_000_000, 1);
         qtySpinner.setEditable(true);
         qtySpinner.setPrefWidth(100);
-        qtySpinner.setDisable(true);
+        qtySpinner.setDisable(selectedIndex[0] < 0);
 
         final Button buyBtn = new Button("Buy Shares");
         buyBtn.getStyleClass().add("primary-button");
-        buyBtn.setDisable(true);
+        buyBtn.setDisable(selectedIndex[0] < 0);
 
         final Label pickHint = new Label("Click an option below to trade it ↓");
         pickHint.getStyleClass().add("hint-chip");
@@ -513,9 +591,14 @@ public class MainController
         for (int i = 0; i < options.size(); i++) {
             final VBox card = priceCard(options.get(i), false);
             card.setCursor(Cursor.HAND);
+            if (i == selectedIndex[0]) {
+                card.getStyleClass().removeAll("price-card", "price-card-selected");
+                card.getStyleClass().add("price-card-selected");
+            }
             final int idx = i;
             card.setOnMouseClicked(e -> {
                 selectedIndex[0] = idx;
+                selectedLmsrOptionByEvent.put(eventId, idx);
                 for (int j = 0; j < cardNodes.size(); j++) {
                     final VBox c = cardNodes.get(j);
                     c.getStyleClass().removeAll("price-card", "price-card-selected");
@@ -582,28 +665,73 @@ public class MainController
         }
         nodes.add(books);
 
-        final TableView<ParticipantHoldingDTO> participantsTable = new TableView<>();
-        participantsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
-        final TableColumn<ParticipantHoldingDTO, String> userCol = new TableColumn<>("Participant");
-        userCol.setCellValueFactory(new PropertyValueFactory<>("userName"));
-        userCol.setPrefWidth(140);
-        participantsTable.getColumns().add(userCol);
-        for (int i = 0; i < dto.getOptionBooks().size(); i++) {
-            final int optionIndex = i;
-            final TableColumn<ParticipantHoldingDTO, String> holdingCol = new TableColumn<>(dto.getOptionBooks().get(i).getOptionName() + " held");
-            holdingCol.setCellValueFactory(row -> new SimpleStringProperty(String.valueOf(row.getValue().getHoldingsByOption().get(optionIndex))));
-            holdingCol.setPrefWidth(110);
-            participantsTable.getColumns().add(holdingCol);
-        }
-        final TableColumn<ParticipantHoldingDTO, String> valueCol = new TableColumn<>("Est. value");
-        valueCol.setCellValueFactory(row -> new SimpleStringProperty(money(row.getValue().getEstimatedValue())));
-        valueCol.setPrefWidth(100);
-        participantsTable.getColumns().add(valueCol);
-        participantsTable.getItems().addAll(dto.getParticipants());
-        participantsTable.setPlaceholder(new Label("No participants yet."));
+        if (interactive) {
+            // Account tab: this user's own position only - never expose other participants'
+            // holdings here. Ported from Ex2's buildOrderBookDetail, which branched the exact same
+            // way on viewingUserName - the port here had dropped that branch and always showed the
+            // full participants table regardless of which tab this was.
+            final VBox positionCard = new VBox(10);
+            positionCard.getStyleClass().add("book-panel");
+            positionCard.setPadding(new Insets(14));
+            positionCard.getChildren().add(centerLabel(sectionLabel("Your position")));
 
-        nodes.add(centerLabel(sectionLabel("Participations")));
-        nodes.add(participantsTable);
+            ParticipantHoldingDTO mine = null;
+            for (final ParticipantHoldingDTO p : dto.getParticipants()) {
+                if (p.getUserName().equals(viewedUserName)) {
+                    mine = p;
+                    break;
+                }
+            }
+            if (mine == null) {
+                positionCard.getChildren().add(centerLabel(placeholder("No holdings by this user yet.")));
+            } else {
+                final FlowPane optionCards = new FlowPane(12, 10);
+                optionCards.setAlignment(Pos.CENTER);
+                for (int i = 0; i < dto.getOptionBooks().size(); i++) {
+                    optionCards.getChildren().add(optionPositionCard(dto.getOptionBooks().get(i).getOptionName(), mine.getHoldingsByOption().get(i), mine.getPaidByOption().get(i)));
+                }
+                positionCard.getChildren().add(optionCards);
+
+                final List<Node> summaryTiles = new ArrayList<>();
+                // Same sleek, non-obvious phrasing as the LMSR detail's per-viewer commission tile -
+                // this box only ever renders for the one user looking at their own position.
+                summaryTiles.add(statTile("Your commission", money(mine.getCommissionPaid()), "meta-value"));
+                if ("CLOSED".equals(dto.getStatus()) && mine.getProfitOrLoss() != null) {
+                    final double pl = mine.getProfitOrLoss();
+                    final boolean profit = pl >= 0;
+                    summaryTiles.add(statTile(profit ? "Profit" : "Loss", money(Math.abs(pl)), profit ? "pl-positive" : "pl-negative"));
+                }
+                final FlowPane summaryStrip = new FlowPane(10, 10, summaryTiles.toArray(new Node[0]));
+                summaryStrip.setAlignment(Pos.CENTER);
+                positionCard.getChildren().add(summaryStrip);
+            }
+            nodes.add(positionCard);
+        } else {
+            // Events tab: a read-only overview of every participant's position - appropriate here,
+            // since this view is about the whole market, not any one person.
+            final TableView<ParticipantHoldingDTO> participantsTable = new TableView<>();
+            participantsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
+            final TableColumn<ParticipantHoldingDTO, String> userCol = new TableColumn<>("Participant");
+            userCol.setCellValueFactory(new PropertyValueFactory<>("userName"));
+            userCol.setPrefWidth(140);
+            participantsTable.getColumns().add(userCol);
+            for (int i = 0; i < dto.getOptionBooks().size(); i++) {
+                final int optionIndex = i;
+                final TableColumn<ParticipantHoldingDTO, String> holdingCol = new TableColumn<>(dto.getOptionBooks().get(i).getOptionName() + " held");
+                holdingCol.setCellValueFactory(row -> new SimpleStringProperty(String.valueOf(row.getValue().getHoldingsByOption().get(optionIndex))));
+                holdingCol.setPrefWidth(110);
+                participantsTable.getColumns().add(holdingCol);
+            }
+            final TableColumn<ParticipantHoldingDTO, String> valueCol = new TableColumn<>("Est. value");
+            valueCol.setCellValueFactory(row -> new SimpleStringProperty(money(row.getValue().getEstimatedValue())));
+            valueCol.setPrefWidth(100);
+            participantsTable.getColumns().add(valueCol);
+            participantsTable.getItems().addAll(dto.getParticipants());
+            participantsTable.setPlaceholder(new Label("No participants yet."));
+
+            nodes.add(centerLabel(sectionLabel("Participations")));
+            nodes.add(participantsTable);
+        }
 
         return nodes;
     }
@@ -1023,6 +1151,8 @@ public class MainController
         if (selected == null) {
             userAccountPane.getChildren().setAll(new Label("Select a user to see their account."));
             userDetailPane.getChildren().setAll(new Label("Select a user to see their details."));
+            lastRenderedAccountUser = null;
+            lastRenderedUserDetailUser = null;
             return;
         }
         // Unlike events, getAllUsers() already returns everything both panes need - there is no
@@ -1081,10 +1211,17 @@ public class MainController
 
     private void renderUserAccountPane(final UserSummaryDTO user)
     {
+        if (user == lastRenderedAccountUser) {
+            return;
+        }
+        lastRenderedAccountUser = user;
+
         final Map<String, String> typedValues = captureFieldValues(userAccountPane);
+        final Double scroll = captureScroll(userAccountPane);
         final boolean isSelf = user.getName().equals(Session.getUserName());
         userAccountPane.getChildren().setAll(buildAccountPane(user, isSelf));
         restoreFieldValues(userAccountPane, typedValues);
+        restoreScroll(userAccountPane, scroll);
     }
 
     /**
@@ -1115,11 +1252,15 @@ public class MainController
         final Button depositButton = new Button("Deposit");
         depositButton.getStyleClass().add("primary-button");
         depositButton.setOnAction(event -> handleDeposit(amountSpinner));
-        final HBox depositRow = new HBox(6, dollarSign, amountSpinner, depositButton);
+        // FlowPane, not HBox: at the window's minimum width this column is narrow enough that an
+        // HBox would rather compress the Button below its natural size than overflow - which
+        // clips its label to "De..." instead of wrapping. FlowPane wraps the button to its own row
+        // instead of ever shrinking it.
+        final FlowPane depositRow = new FlowPane(6, 6, dollarSign, amountSpinner, depositButton);
         depositRow.setAlignment(Pos.CENTER);
-        // Without this, the VBox body (fillWidth=true by default) stretches this HBox to the
-        // card's full width, which then hugs its *own* content to the left inside that width -
-        // capping it to its natural width lets the body's own CENTER alignment actually center it.
+        // Without this, the VBox body (fillWidth=true by default) stretches this row to the card's
+        // full width, which then hugs its *own* content to the left inside that width - capping it
+        // to its natural width lets the body's own CENTER alignment actually center it.
         depositRow.setMaxWidth(Region.USE_PREF_SIZE);
         depositRow.getStyleClass().add("tradebox");
         card.body().getChildren().add(withDisabledTooltip(depositRow, isSelf, NOT_YOURSELF_MESSAGE));
@@ -1133,6 +1274,9 @@ public class MainController
                 final Label row = new Label(String.format("[%s] %s: %s%s (balance after: %s)",
                     entry.getAt().format(TIME_FORMAT), entry.getDescription(), sign, money(entry.getAmount()), money(entry.getBalanceAfter())));
                 row.getStyleClass().add(entry.getAmount() >= 0 ? "pl-positive" : "pl-negative");
+                // Without this, a narrow window (see the resize requirement) hard-truncates this
+                // with Label's default ellipsis instead of wrapping to a second line.
+                row.setWrapText(true);
                 historyCard.body().getChildren().add(row);
             }
         }
@@ -1143,10 +1287,29 @@ public class MainController
 
     private void renderUserDetail(final UserSummaryDTO user)
     {
+        // buildUserDetail's own output only ever depends on user.getName() (for the title/isSelf)
+        // and, for the participation cards, each event's name/type/status/marketMakerName - never
+        // balance (yours or the event's own account/pot), commission, description, or option names.
+        // Gating on reference equality of the whole UserSummaryDTO was wrong (a Buy/Deposit always
+        // changes your balance), and reusing eventSummaryEquals for the events-list half was just as
+        // wrong the other way: it also compares accountBalance, and a Buy always changes the traded
+        // event's own account balance too - so either check alone made this pane, singleEventBox and
+        // all, rebuild from scratch a second after every trade, undoing the selected-card/scroll
+        // restoration the immediate post-trade refresh had just put back. Comparing only what this
+        // pane actually renders means a pure balance change - on either side - no longer touches it.
+        final boolean sameUser = lastRenderedUserDetailUser != null && lastRenderedUserDetailUser.getName().equals(user.getName());
+        if (sameUser && listsEqual(lastRenderedUserDetailEvents, allEvents, this::participationRelevantEquals)) {
+            return;
+        }
+        lastRenderedUserDetailUser = user;
+        lastRenderedUserDetailEvents = new ArrayList<>(allEvents);
+
         final Map<String, String> typedValues = captureFieldValues(userDetailPane);
+        final Double scroll = captureScroll(userDetailPane);
         final boolean isSelf = user.getName().equals(Session.getUserName());
         userDetailPane.getChildren().setAll(buildUserDetail(user, isSelf));
         restoreFieldValues(userDetailPane, typedValues);
+        restoreScroll(userDetailPane, scroll);
     }
 
     /**
@@ -1197,6 +1360,8 @@ public class MainController
                 populateSingleEventBox(selectedInlineEventName, singleEventBox, user.getName());
             } else {
                 selectedInlineEventName = null;
+                lastRenderedInlineEventDetail = null;
+                lastPopulatedSingleEventBox = null;
                 singleEventBox.getChildren().add(placeholder("Click an event above to see its full details and trade here."));
             }
             singleEventCard.body().getChildren().add(singleEventBox);
@@ -1323,14 +1488,22 @@ public class MainController
      */
     private void populateSingleEventBox(final String eventName, final VBox box, final String viewedUserName)
     {
-        final Map<String, String> typedValues = captureFieldValues(box);
         final Runnable onChange = () -> populateSingleEventBox(eventName, box, viewedUserName);
         runAsync(() -> ApiClient.getEventDetails(eventName), details -> {
+            if (box == lastPopulatedSingleEventBox && eventDetailsEqual(details, lastRenderedInlineEventDetail)) {
+                return;
+            }
+            lastPopulatedSingleEventBox = box;
+            lastRenderedInlineEventDetail = details;
+
+            final Map<String, String> typedValues = captureFieldValues(box);
+            final Double scroll = captureScroll(box);
             final List<Node> content = details instanceof LmsrEventDetailsDTO
                 ? buildLmsrDetail((LmsrEventDetailsDTO) details, onChange, viewedUserName)
                 : buildOrderBookDetail((OrderBookEventDetailsDTO) details, onChange, viewedUserName);
             box.getChildren().setAll(content);
             restoreFieldValues(box, typedValues);
+            restoreScroll(box, scroll);
         });
     }
 
@@ -1582,6 +1755,108 @@ public class MainController
         return true;
     }
 
+    // ---------------------------------------------------------------- flicker gates: deep equals
+    // getEventDetails() hands back a brand-new DTO tree every poll tick even when nothing on the
+    // server actually changed, so unlike the Account tab's user object (see renderUserAccountPane),
+    // reference equality is useless here - these walk every field the detail views actually render
+    // (see buildLmsrDetail/buildOrderBookDetail) so a tick with identical data is recognized as such
+    // and the pane is left untouched. Anything not rendered anywhere (priceHistory/ChartPointDTO) is
+    // deliberately skipped, same reasoning as eventSummaryEquals/userSummaryEquals above.
+
+    private boolean eventDetailsEqual(final EventDetailsDTO x, final EventDetailsDTO y)
+    {
+        if (x == y) {
+            return true;
+        }
+        if (x == null || y == null) {
+            return false;
+        }
+        if (x instanceof LmsrEventDetailsDTO && y instanceof LmsrEventDetailsDTO) {
+            return lmsrDetailsEqual((LmsrEventDetailsDTO) x, (LmsrEventDetailsDTO) y);
+        }
+        if (x instanceof OrderBookEventDetailsDTO && y instanceof OrderBookEventDetailsDTO) {
+            return orderBookDetailsEqual((OrderBookEventDetailsDTO) x, (OrderBookEventDetailsDTO) y);
+        }
+        return false;
+    }
+
+    private boolean lmsrDetailsEqual(final LmsrEventDetailsDTO x, final LmsrEventDetailsDTO y)
+    {
+        return x.getName().equals(y.getName())
+            && x.getDescription().equals(y.getDescription())
+            && x.getCommission() == y.getCommission()
+            && x.getCommissionType().equals(y.getCommissionType())
+            && x.getStatus().equals(y.getStatus())
+            && Double.compare(x.getAccountBalance(), y.getAccountBalance()) == 0
+            && Double.compare(x.getTotalCommissionCollected(), y.getTotalCommissionCollected()) == 0
+            && Objects.equals(x.getWinningOptionName(), y.getWinningOptionName())
+            && x.getMarketMakerName().equals(y.getMarketMakerName())
+            && listsEqual(x.getOptions(), y.getOptions(), this::optionEqual)
+            && listsEqual(x.getTransactions(), y.getTransactions(), this::transactionEqual);
+    }
+
+    private boolean optionEqual(final OptionDTO x, final OptionDTO y)
+    {
+        return x.getName().equals(y.getName())
+            && x.getSharesBought() == y.getSharesBought()
+            && Double.compare(x.getCurrentProbability(), y.getCurrentProbability()) == 0;
+    }
+
+    private boolean transactionEqual(final TransactionDTO x, final TransactionDTO y)
+    {
+        return x.getUserName().equals(y.getUserName())
+            && x.getOptionName().equals(y.getOptionName())
+            && x.getQuantity() == y.getQuantity()
+            && Double.compare(x.getPricePaid(), y.getPricePaid()) == 0
+            && Double.compare(x.getCommissionPaid(), y.getCommissionPaid()) == 0
+            && x.getTimestamp().equals(y.getTimestamp());
+    }
+
+    private boolean orderBookDetailsEqual(final OrderBookEventDetailsDTO x, final OrderBookEventDetailsDTO y)
+    {
+        return x.getName().equals(y.getName())
+            && x.getDescription().equals(y.getDescription())
+            && x.getCommission() == y.getCommission()
+            && x.getCommissionType().equals(y.getCommissionType())
+            && x.getStatus().equals(y.getStatus())
+            && Double.compare(x.getAccountBalance(), y.getAccountBalance()) == 0
+            && x.getBaseValue() == y.getBaseValue()
+            && x.isAllowMint() == y.isAllowMint()
+            && Objects.equals(x.getWinningOptionName(), y.getWinningOptionName())
+            && x.getMarketMakerName().equals(y.getMarketMakerName())
+            && listsEqual(x.getOptionBooks(), y.getOptionBooks(), this::optionBookEqual)
+            && listsEqual(x.getParticipants(), y.getParticipants(), this::participantEqual);
+    }
+
+    private boolean optionBookEqual(final OptionBookDTO x, final OptionBookDTO y)
+    {
+        return x.getOptionName().equals(y.getOptionName())
+            && Objects.equals(x.getLast(), y.getLast())
+            && Objects.equals(x.getBid(), y.getBid())
+            && Objects.equals(x.getAsk(), y.getAsk())
+            && Objects.equals(x.getMid(), y.getMid())
+            && Objects.equals(x.getSpread(), y.getSpread())
+            && listsEqual(x.getBids(), y.getBids(), this::orderEqual)
+            && listsEqual(x.getAsks(), y.getAsks(), this::orderEqual);
+    }
+
+    private boolean orderEqual(final OrderDTO x, final OrderDTO y)
+    {
+        return x.getUserName().equals(y.getUserName())
+            && x.getQuantity() == y.getQuantity()
+            && Double.compare(x.getPrice(), y.getPrice()) == 0;
+    }
+
+    private boolean participantEqual(final ParticipantHoldingDTO x, final ParticipantHoldingDTO y)
+    {
+        return x.getUserName().equals(y.getUserName())
+            && x.getHoldingsByOption().equals(y.getHoldingsByOption())
+            && x.getPaidByOption().equals(y.getPaidByOption())
+            && Double.compare(x.getEstimatedValue(), y.getEstimatedValue()) == 0
+            && Double.compare(x.getCommissionPaid(), y.getCommissionPaid()) == 0
+            && Objects.equals(x.getProfitOrLoss(), y.getProfitOrLoss());
+    }
+
     private List<String> optionNames(final EventDetailsDTO details)
     {
         final List<String> names = new ArrayList<>();
@@ -1653,6 +1928,43 @@ public class MainController
         return false;
     }
 
+    /**
+     * Finds the nearest ancestor ScrollPane (if any) and returns its current vvalue, so a rebuild
+     * that swaps out a whole subtree - the only way any of these detail panes ever update - can put
+     * the viewport back where it was instead of snapping to the top, which a fresh layout pass
+     * otherwise has no memory of.
+     */
+    private Double captureScroll(final Node node)
+    {
+        final ScrollPane scrollPane = findAncestorScrollPane(node);
+        return scrollPane == null ? null : scrollPane.getVvalue();
+    }
+
+    // Layout needs a beat to settle on the new content's height before vvalue means anything -
+    // setting it in the same pulse that just replaced the children is what silently no-ops here.
+    private void restoreScroll(final Node node, final Double vvalue)
+    {
+        if (vvalue == null) {
+            return;
+        }
+        final ScrollPane scrollPane = findAncestorScrollPane(node);
+        if (scrollPane != null) {
+            Platform.runLater(() -> scrollPane.setVvalue(vvalue));
+        }
+    }
+
+    private ScrollPane findAncestorScrollPane(final Node node)
+    {
+        Node current = node.getParent();
+        while (current != null) {
+            if (current instanceof ScrollPane) {
+                return (ScrollPane) current;
+            }
+            current = current.getParent();
+        }
+        return null;
+    }
+
     private VBox priceCard(final OptionDTO option, final boolean isWinner)
     {
         final HBox nameRow = isWinner
@@ -1670,6 +1982,24 @@ public class MainController
         card.getStyleClass().add(isWinner ? "price-card-winner" : "price-card");
         card.setPadding(new Insets(16, 22, 16, 22));
         card.setPrefWidth(190);
+        return card;
+    }
+
+    /** One option's worth of an Order Book "Your position" card - ported from Ex2 as-is. */
+    private VBox optionPositionCard(final String optionName, final int sharesHeld, final double amountPaid)
+    {
+        final Label name = new Label(optionName);
+        final Label shares = new Label(sharesHeld + " shares held");
+        shares.getStyleClass().add("position-card-shares");
+        shares.setWrapText(true);
+        shares.setTextAlignment(TextAlignment.CENTER);
+        final Label paid = new Label("Paid: " + money(amountPaid));
+        paid.getStyleClass().add("position-card-paid");
+        final VBox card = new VBox(4, centerLabel(name), centerLabel(shares), centerLabel(paid));
+        card.setAlignment(Pos.CENTER);
+        card.getStyleClass().add("price-card");
+        card.setPadding(new Insets(10, 14, 10, 14));
+        card.setPrefWidth(210);
         return card;
     }
 
