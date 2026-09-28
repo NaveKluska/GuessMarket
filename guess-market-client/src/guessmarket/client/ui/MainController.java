@@ -23,6 +23,7 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ChangeListener;
+import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.event.Event;
@@ -151,48 +152,34 @@ public class MainController
     // -1 so the very first (possibly empty) chat fetch is never mistaken for "nothing changed".
     private int lastChatMessageCount = -1;
 
-    // ---------------------------------------------------------------- flicker gates
-    // Every poll tick fetches brand-new DTO instances even when nothing actually changed server
-    // side, so naively rebuilding a detail pane every second flickers whatever's selected/focused/
-    // scrolled inside it. Each of these caches the last value a pane was actually rebuilt from, so
-    // a tick that produced value-identical data can skip touching that pane's nodes entirely -
-    // null'd out whenever the pane goes back to its "nothing selected" placeholder, so reselecting
-    // afterwards is never mistaken for "unchanged".
+    // ---------------------------------------------------------------- live detail views
+    // eventDetailPane (Events tab) and the Account tab's inline "Single event details and trade"
+    // box are each backed by one persistent LmsrView/OrderBookView (see those classes below) that
+    // is built once and patched in place afterward - so these two just track which event/box that
+    // live view currently belongs to, to know when a genuinely different one needs a fresh view
+    // instead of a patch. Reset to null wherever the pane goes back to its placeholder.
 
-    /** eventDetailPane (Events tab) - getEventDetails() is a fresh fetch every tick, so this needs a
-     * real value-based comparison (eventDetailsEqual), not reference equality. */
-    private EventDetailsDTO lastRenderedEventDetail;
+    private String currentEventsDetailEventName;
+    /** An LmsrView or an OrderBookView - the two don't share a supertype (their update() methods
+     * take different DTO types), so callers branch on instanceof rather than a common interface. */
+    private Object currentEventsDetailView;
 
-    /** The Account tab's inline "Single event details and trade" box - rendered independently of
-     * buildUserDetail (see populateSingleEventBox) so it keeps refreshing every tick even while the
-     * surrounding Account Details rebuild below is skipped. Same value-based comparison as above -
-     * but unlike eventDetailPane (one fixed FXML pane, reused forever), the box itself is a brand
-     * new VBox instance every time buildUserDetail runs (switching which user's page you're on, or
-     * any real change to it). Gating purely on the fetched data was wrong: if it happened to equal
-     * whatever was last cached from a *different* box entirely (e.g. an event you had open while
-     * viewing your own page, now auto-reopened under someone else's), the gate would silently skip
-     * populating this new, still-empty box - looking exactly like the click did nothing. Tracking
-     * which box that data was actually rendered into is what makes a different box always render. */
-    private EventDetailsDTO lastRenderedInlineEventDetail;
-    private VBox lastPopulatedSingleEventBox;
+    private VBox currentInlineBox;
+    private String currentInlineEventName;
+    private Object currentInlineView;
 
-    /** userAccountPane / userDetailPane (Account tab) - both are built from whichever UserSummaryDTO
-     * instance is already selected in userListView, which only ever changes reference when
-     * applyUsers's own list-level check (userSummaryEquals) decided something did. So if it's
-     * literally the same instance as last render, nothing changed - reference equality suffices. */
-    private UserSummaryDTO lastRenderedAccountUser;
+    /** userAccountPane's live view (Account tab, left column) - built once, patched in place, same
+     * as the event detail views above. */
+    private AccountPaneView accountPaneView;
+
+    /** userDetailPane (Account tab, right column) - still rebuilt wholesale, but only when the
+     * things it actually renders change (see renderUserDetail): which user is shown, and the
+     * participation-relevant fields of the event list. A pure balance change no longer touches it. */
     private UserSummaryDTO lastRenderedUserDetailUser;
     /** buildUserDetail also iterates allEvents (participation cards) - allEvents itself is a fresh
      * List instance every tick regardless of content, so this needs eventSummaryEquals, not
      * reference equality. */
     private List<EventSummaryDTO> lastRenderedUserDetailEvents = new ArrayList<>();
-
-    /** Which LMSR option card was last selected for a given event's Buy Shares panel, keyed by
-     * event name. A real trade is exactly the kind of change the gates above are meant to let
-     * through - interactiveLmsrCards is still rebuilt from scratch, which would otherwise silently
-     * reset "nothing selected" right after buying, along with the quantity/Buy controls it had
-     * unlocked. */
-    private final Map<String, Integer> selectedLmsrOptionByEvent = new HashMap<>();
 
     @FXML
     private void initialize()
@@ -384,20 +371,18 @@ public class MainController
     }
 
     /**
-     * quiet=true is the background poll calling in: if you currently have a control inside
-     * eventDetailPane focused - a TextField mid-typed, or a ComboBox with its dropdown open -
-     * skip the refresh entirely rather than tear the whole pane down and rebuild it under you.
-     * A rebuild replaces every control with a brand-new instance, so an open dropdown snaps shut
-     * and a focused field loses focus even though its typed text survives (see
-     * captureFieldValues) - the fix is to just not rebuild at all while you're using it. This
-     * only applies to the passive poll; an explicit action (Buy, Open, a filter change) always
-     * refreshes for real, since you specifically want to see its result.
+     * quiet=true is the background poll calling in. renderEventDetail patches values in place for
+     * an unchanged event, so a focused control is only ever at risk during a genuine structural
+     * rebuild (the event's status or winning option actually changed) - rare enough, and real
+     * enough when it happens, that skipping the whole refresh while mid-interaction is still the
+     * safer default. An explicit action (Buy, Open, a filter change) always refreshes for real.
      */
     private void showEventDetails(final EventSummaryDTO selected, final boolean quiet)
     {
         if (selected == null) {
             eventDetailPane.getChildren().setAll(new Label("Select an event to see its details."));
-            lastRenderedEventDetail = null;
+            currentEventsDetailEventName = null;
+            currentEventsDetailView = null;
             return;
         }
         if (quiet && paneHasFocus(eventDetailPane)) {
@@ -444,26 +429,35 @@ public class MainController
 
     // ---------------------------------------------------------------- events: detail rendering
 
+    /**
+     * Read-only, exactly like Ex2's Events tab - trading happens on the Account tab instead. null
+     * viewedUserName (passed down to the view below) is what makes it read-only. A genuinely
+     * different event gets a fresh LmsrView/OrderBookView (see those classes, further down); the
+     * same event just gets patched in place - no rebuild, so no flicker, no lost scroll position.
+     */
     private void renderEventDetail(final EventDetailsDTO details)
     {
-        if (eventDetailsEqual(details, lastRenderedEventDetail)) {
+        final Runnable onChange = () -> reloadAndShowEvent(details.getName());
+        if (!details.getName().equals(currentEventsDetailEventName)) {
+            currentEventsDetailEventName = details.getName();
+            if (details instanceof LmsrEventDetailsDTO) {
+                final LmsrView view = new LmsrView(null);
+                view.update((LmsrEventDetailsDTO) details, onChange);
+                currentEventsDetailView = view;
+                eventDetailPane.getChildren().setAll(view.getRoot());
+            } else {
+                final OrderBookView view = new OrderBookView(null);
+                view.update((OrderBookEventDetailsDTO) details, onChange);
+                currentEventsDetailView = view;
+                eventDetailPane.getChildren().setAll(view.getRoot());
+            }
             return;
         }
-        lastRenderedEventDetail = details;
-
-        final Map<String, String> typedValues = captureFieldValues(eventDetailPane);
-        final Double scroll = captureScroll(eventDetailPane);
-
-        final Runnable onChange = () -> reloadAndShowEvent(details.getName());
-        // Read-only, exactly like Ex2's Events tab - trading happens on the Account tab instead.
-        // null viewedUserName is what makes it read-only (no "whose page is this" to act as).
-        final List<Node> nodes = details instanceof LmsrEventDetailsDTO
-            ? buildLmsrDetail((LmsrEventDetailsDTO) details, onChange, null)
-            : buildOrderBookDetail((OrderBookEventDetailsDTO) details, onChange, null);
-        eventDetailPane.getChildren().setAll(nodes);
-
-        restoreFieldValues(eventDetailPane, typedValues);
-        restoreScroll(eventDetailPane, scroll);
+        if (currentEventsDetailView instanceof LmsrView) {
+            ((LmsrView) currentEventsDetailView).update((LmsrEventDetailsDTO) details, onChange);
+        } else {
+            ((OrderBookView) currentEventsDetailView).update((OrderBookEventDetailsDTO) details, onChange);
+        }
     }
 
     // A trade/open/close can change both this event's own detail and any user's balance or
@@ -529,13 +523,7 @@ public class MainController
             nodes.add(priceCards);
         }
 
-        // Most recent first - matching Ex2 exactly (getTransactions() is oldest-first, so newest
-        // ends up on top here, same as everywhere else trade history is shown).
-        final List<TransactionDTO> history = new ArrayList<>(dto.getTransactions());
-        Collections.reverse(history);
-        if (interactive) {
-            history.removeIf(tx -> !tx.getUserName().equals(Session.getUserName()));
-        }
+        final List<TransactionDTO> history = filteredLmsrHistory(dto, viewedUserName);
 
         final TableView<TransactionDTO> table = new TableView<>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
@@ -557,29 +545,43 @@ public class MainController
         return nodes;
     }
 
+    /** Most recent first - matching Ex2 exactly (getTransactions() is oldest-first, so newest ends
+     * up on top here, same as everywhere else trade history is shown). Interactive (Account tab)
+     * filters down to just the viewer's own trades; the read-only Events tab keeps everyone's. */
+    private List<TransactionDTO> filteredLmsrHistory(final LmsrEventDetailsDTO dto, final String viewedUserName)
+    {
+        final List<TransactionDTO> history = new ArrayList<>(dto.getTransactions());
+        Collections.reverse(history);
+        if (viewedUserName != null) {
+            history.removeIf(tx -> !tx.getUserName().equals(Session.getUserName()));
+        }
+        return history;
+    }
+
     /** The two LMSR option cards, made clickable: pick a card to trade it, then a shared quantity
      * spinner and Buy button below act on whichever card is currently selected. Nothing is
      * pre-selected - the spinner and button stay disabled until the user picks an option. When
      * isSelf is false (viewing someone else's page), the whole controls row is grayed out with a
      * tooltip instead - the card-click selection still visually works, it just never enables
      * anything, since a disabled parent keeps its children effectively disabled regardless of
-     * their own state. */
+     * their own state.
+     * <p>
+     * This VBox is now only ever built once per structural epoch (see LmsrView) - a click here
+     * survives every poll tick on its own simply because nothing rebuilds it out from under the
+     * user, so there is no need to separately remember and restore which card was selected. */
     private VBox interactiveLmsrCards(final String eventId, final List<OptionDTO> options, final Runnable onChange, final boolean isSelf)
     {
         final List<VBox> cardNodes = new ArrayList<>();
-        // Restores whichever card was selected before this rebuild (a Buy just made is exactly the
-        // kind of real change that triggers one) instead of always starting back at "nothing picked".
-        final Integer remembered = selectedLmsrOptionByEvent.get(eventId);
-        final int[] selectedIndex = { remembered != null && remembered < options.size() ? remembered : -1 };
+        final int[] selectedIndex = { -1 };
 
         final Spinner<Integer> qtySpinner = new Spinner<>(1, 1_000_000, 1);
         qtySpinner.setEditable(true);
         qtySpinner.setPrefWidth(100);
-        qtySpinner.setDisable(selectedIndex[0] < 0);
+        qtySpinner.setDisable(true);
 
         final Button buyBtn = new Button("Buy Shares");
         buyBtn.getStyleClass().add("primary-button");
-        buyBtn.setDisable(selectedIndex[0] < 0);
+        buyBtn.setDisable(true);
 
         final Label pickHint = new Label("Click an option below to trade it ↓");
         pickHint.getStyleClass().add("hint-chip");
@@ -591,14 +593,9 @@ public class MainController
         for (int i = 0; i < options.size(); i++) {
             final VBox card = priceCard(options.get(i), false);
             card.setCursor(Cursor.HAND);
-            if (i == selectedIndex[0]) {
-                card.getStyleClass().removeAll("price-card", "price-card-selected");
-                card.getStyleClass().add("price-card-selected");
-            }
             final int idx = i;
             card.setOnMouseClicked(e -> {
                 selectedIndex[0] = idx;
-                selectedLmsrOptionByEvent.put(eventId, idx);
                 for (int j = 0; j < cardNodes.size(); j++) {
                     final VBox c = cardNodes.get(j);
                     c.getStyleClass().removeAll("price-card", "price-card-selected");
@@ -777,6 +774,386 @@ public class MainController
         table.setPlaceholder(new Label("—"));
         table.setPrefHeight(120);
         return table;
+    }
+
+    // ---------------------------------------------------------------- live detail views
+    //
+    // The actual flicker/selection-loss fix. A poll tick fetches a brand-new DTO tree every
+    // second even when nothing on the server changed, so naively rebuilding a detail pane from
+    // that DTO every time is what caused every symptom this project chased separately: the
+    // selected Buy card resetting, the ScrollPane jumping to the top, a stale equality check
+    // occasionally skipping a render that was actually needed. None of that is a series of
+    // separate bugs to patch - it's one wrong shape (rebuild-or-skip) for the whole render path.
+    //
+    // Real fix: build the Node tree exactly once per "structural epoch" (still via the existing
+    // buildLmsrDetail/buildOrderBookDetail - nothing about how this looks changes at all), keep
+    // live references to the handful of Nodes that can change value on their own, and on every
+    // later tick push new values into those same Nodes directly. Nothing is ever torn down unless
+    // the event's status or winning option actually changes - a real, rare content transition,
+    // not something to optimize around - in which case a full rebuild of that epoch is correct
+    // and expected (a fresh coat of controls for a genuinely new phase of the event), same as it
+    // always was. Because nothing else is ever destroyed, a selected card, a typed quantity, and
+    // a scroll position all simply survive on their own - there is nothing left patching them.
+
+    /**
+     * Walks a just-built Node tree looking for a FlowPane whose direct children are all
+     * "one option's price card" (priceCard's own shape: a VBox with >= 4 children, the second of
+     * which is a Label styled price-card-value) - true for both the read-only priceCards FlowPane
+     * and interactiveLmsrCards' cardsRow, without needing to know which of the two produced it.
+     * Collects into cardsOut and stops at the first match, since a detail view only ever has one
+     * such row.
+     */
+    private void collectPriceCards(final Node node, final List<VBox> cardsOut)
+    {
+        if (node instanceof FlowPane) {
+            final List<Node> children = ((FlowPane) node).getChildren();
+            boolean allPriceCards = !children.isEmpty();
+            for (final Node child : children) {
+                if (!(child instanceof VBox) || ((VBox) child).getChildren().size() < 4
+                    || !(((VBox) child).getChildren().get(1) instanceof Label)
+                    || !((Label) ((VBox) child).getChildren().get(1)).getStyleClass().contains("price-card-value")) {
+                    allPriceCards = false;
+                    break;
+                }
+            }
+            if (allPriceCards) {
+                for (final Node child : children) {
+                    cardsOut.add((VBox) child);
+                }
+                return;
+            }
+        }
+        if (node instanceof Parent) {
+            for (final Node child : ((Parent) node).getChildrenUnmodifiable()) {
+                collectPriceCards(child, cardsOut);
+                if (!cardsOut.isEmpty()) {
+                    return;
+                }
+            }
+        }
+    }
+
+    /** Scoped exception to "never rebuild a table": OrderDTO carries no stable per-row id (just
+     * userName/quantity/price), so a resting order that partially fills is indistinguishable from
+     * one that was cancelled and a new one rested at the same price - there is no way to diff this
+     * table row-by-row without guessing. Comparing the whole list by value and replacing it only
+     * when it actually changed is still far better than the old approach (which replaced it every
+     * tick regardless) - this table has no per-row selection that matters, so the only real cost
+     * is losing its own scroll position on a tick where it genuinely changed, not every tick. */
+    private void patchOrderTable(final TableView<OrderDTO> table, final List<OrderDTO> newOrders)
+    {
+        if (!listsEqual(table.getItems(), newOrders, this::orderEqual)) {
+            table.getItems().setAll(newOrders);
+        }
+    }
+
+    /** Unlike the order tables above, a participant has a stable identity (userName), so this
+     * diffs properly: an existing participant whose holdings changed gets their one row replaced
+     * (table.getItems().set - refreshes just that row's cells, everyone else's row, the table's
+     * scroll position and its selection are all left completely alone); a brand new participant
+     * gets appended. Participants never stop being one once they've traded, so there is nothing to
+     * remove. */
+    private void patchParticipants(final TableView<ParticipantHoldingDTO> table, final List<ParticipantHoldingDTO> newParticipants)
+    {
+        final ObservableList<ParticipantHoldingDTO> items = table.getItems();
+        final Map<String, Integer> indexByUser = new HashMap<>();
+        for (int i = 0; i < items.size(); i++) {
+            indexByUser.put(items.get(i).getUserName(), i);
+        }
+        for (final ParticipantHoldingDTO p : newParticipants) {
+            final Integer idx = indexByUser.get(p.getUserName());
+            if (idx == null) {
+                items.add(p);
+            } else if (!participantEqual(items.get(idx), p)) {
+                items.set(idx, p);
+            }
+        }
+    }
+
+    /** One LMSR event's detail view: built once via buildLmsrDetail, then patched in place. See the
+     * section comment above for why. viewedUserName is threaded straight through to buildLmsrDetail
+     * exactly as before (null = read-only Events tab; a real name = the Account tab, interactive). */
+    private final class LmsrView
+    {
+        private final VBox root = new VBox();
+        private final String viewedUserName;
+        private String structuralKey;
+        private Label balanceValueLabel;
+        private Label commissionValueLabel;
+        private List<Label> priceLabels;
+        private List<Label> chanceLabels;
+        private List<Label> sharesLabels;
+        private TableView<TransactionDTO> historyTable;
+        private int lastHistoryCount = -1;
+
+        LmsrView(final String viewedUserName)
+        {
+            this.viewedUserName = viewedUserName;
+        }
+
+        Node getRoot()
+        {
+            return root;
+        }
+
+        void update(final LmsrEventDetailsDTO dto, final Runnable onChange)
+        {
+            // Status/winner are the only things that change which controls exist at all (the
+            // action bar, the winner banner, interactive-vs-plain price cards) - everything else
+            // that can change (balance, commission, prices, shares, new trades) is a value update
+            // to a Node that's already there, handled by patchValues below.
+            final String key = dto.getStatus() + "|" + dto.getWinningOptionName();
+            if (!key.equals(structuralKey)) {
+                rebuild(dto, onChange);
+                structuralKey = key;
+            } else {
+                patchValues(dto);
+            }
+        }
+
+        private void rebuild(final LmsrEventDetailsDTO dto, final Runnable onChange)
+        {
+            final List<Node> nodes = buildLmsrDetail(dto, onChange, viewedUserName);
+            root.getChildren().setAll(nodes);
+            harvest(nodes);
+            lastHistoryCount = filteredLmsrHistory(dto, viewedUserName).size();
+        }
+
+        /** detailHeader's own fixed shape - see that method - is what makes the header lookup safe
+         * to hardcode by index; the price cards' shape varies (interactive vs plain), so those go
+         * through the generic collectPriceCards search instead. */
+        @SuppressWarnings("unchecked")
+        private void harvest(final List<Node> nodes)
+        {
+            final VBox header = (VBox) nodes.get(0);
+            final FlowPane meta = (FlowPane) header.getChildren().get(2);
+            balanceValueLabel = (Label) ((VBox) meta.getChildren().get(3)).getChildren().get(1);
+            commissionValueLabel = (Label) ((VBox) meta.getChildren().get(4)).getChildren().get(1);
+
+            final List<VBox> cards = new ArrayList<>();
+            for (final Node n : nodes) {
+                collectPriceCards(n, cards);
+                if (!cards.isEmpty()) {
+                    break;
+                }
+            }
+            priceLabels = new ArrayList<>();
+            chanceLabels = new ArrayList<>();
+            sharesLabels = new ArrayList<>();
+            for (final VBox card : cards) {
+                priceLabels.add((Label) card.getChildren().get(1));
+                chanceLabels.add((Label) card.getChildren().get(2));
+                sharesLabels.add((Label) card.getChildren().get(3));
+            }
+
+            historyTable = null;
+            for (final Node n : nodes) {
+                if (n instanceof TableView) {
+                    historyTable = (TableView<TransactionDTO>) n;
+                    break;
+                }
+            }
+        }
+
+        private void patchValues(final LmsrEventDetailsDTO dto)
+        {
+            balanceValueLabel.setText(money(dto.getAccountBalance()));
+            final double commissionValue = viewedUserName != null
+                ? dto.getCommissionPaidBy(Session.getUserName())
+                : dto.getTotalCommissionCollected();
+            commissionValueLabel.setText(money(commissionValue));
+
+            final List<OptionDTO> options = dto.getOptions();
+            for (int i = 0; i < options.size() && i < priceLabels.size(); i++) {
+                final OptionDTO option = options.get(i);
+                priceLabels.get(i).setText(money(option.getCurrentProbability()));
+                chanceLabels.get(i).setText(Math.round(option.getCurrentProbability() * 100) + "% implied chance");
+                sharesLabels.get(i).setText(option.getSharesBought() + " shares bought");
+            }
+
+            final List<TransactionDTO> history = filteredLmsrHistory(dto, viewedUserName);
+            if (history.size() != lastHistoryCount) {
+                if (lastHistoryCount >= 0 && history.size() > lastHistoryCount) {
+                    // Newest-first, and a transaction is never edited or removed once recorded -
+                    // so a growing history always adds exactly this many brand new rows at the
+                    // front, never touching the existing rows below them.
+                    historyTable.getItems().addAll(0, history.subList(0, history.size() - lastHistoryCount));
+                } else {
+                    historyTable.getItems().setAll(history);
+                }
+                lastHistoryCount = history.size();
+            }
+        }
+    }
+
+    /** One Order Book event's detail view - same idea as LmsrView, see the section comment above. */
+    private final class OrderBookView
+    {
+        private final VBox root = new VBox();
+        private final String viewedUserName;
+        private String structuralKey;
+        private Label balanceValueLabel;
+        private final List<TableView<OrderDTO>> bidsTables = new ArrayList<>();
+        private final List<TableView<OrderDTO>> asksTables = new ArrayList<>();
+        // Per book: [Last, Bid, Ask, Mid, Spread] value Labels, in that order - matches statBox's
+        // own fixed call order in bookPanel.
+        private final List<List<Label>> bookStatLabels = new ArrayList<>();
+        /** Events tab only (viewedUserName == null). */
+        private TableView<ParticipantHoldingDTO> participantsTable;
+        /** Account tab only (viewedUserName != null) - null until the viewer has any holdings at
+         * all, since "Your position" has no cards to harvest labels from before that. */
+        private List<Label> positionSharesLabels;
+        private List<Label> positionPaidLabels;
+
+        OrderBookView(final String viewedUserName)
+        {
+            this.viewedUserName = viewedUserName;
+        }
+
+        Node getRoot()
+        {
+            return root;
+        }
+
+        void update(final OrderBookEventDetailsDTO dto, final Runnable onChange)
+        {
+            // Same idea as LmsrView's key, plus one Order-Book-only wrinkle: on the Account tab,
+            // whether "Your position" has any cards to patch at all depends on whether the viewer
+            // has traded yet - the very first trade needs a real rebuild too (to harvest labels
+            // that didn't exist a tick ago), not just a value patch into labels that don't exist.
+            final boolean hasHoldings = viewedUserName != null && hasHoldings(dto);
+            final String key = dto.getStatus() + "|" + dto.getWinningOptionName() + "|" + hasHoldings;
+            if (!key.equals(structuralKey)) {
+                rebuild(dto, onChange);
+                structuralKey = key;
+            } else {
+                patchValues(dto);
+            }
+        }
+
+        private boolean hasHoldings(final OrderBookEventDetailsDTO dto)
+        {
+            for (final ParticipantHoldingDTO p : dto.getParticipants()) {
+                if (p.getUserName().equals(viewedUserName)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void rebuild(final OrderBookEventDetailsDTO dto, final Runnable onChange)
+        {
+            final List<Node> nodes = buildOrderBookDetail(dto, onChange, viewedUserName);
+            root.getChildren().setAll(nodes);
+            harvest(nodes);
+        }
+
+        @SuppressWarnings("unchecked")
+        private void harvest(final List<Node> nodes)
+        {
+            final VBox header = (VBox) nodes.get(0);
+            final FlowPane meta = (FlowPane) header.getChildren().get(2);
+            balanceValueLabel = (Label) ((VBox) meta.getChildren().get(4)).getChildren().get(1);
+
+            bidsTables.clear();
+            asksTables.clear();
+            bookStatLabels.clear();
+            for (final Node n : nodes) {
+                if (n instanceof FlowPane) {
+                    for (final Node child : ((FlowPane) n).getChildren()) {
+                        if (child instanceof VBox && (((VBox) child).getStyleClass().contains("book-panel")
+                            || ((VBox) child).getStyleClass().contains("book-panel-winner"))) {
+                            harvestBookPanel((VBox) child);
+                        }
+                    }
+                }
+            }
+
+            participantsTable = null;
+            positionSharesLabels = null;
+            positionPaidLabels = null;
+            for (final Node n : nodes) {
+                if (n instanceof TableView) {
+                    participantsTable = (TableView<ParticipantHoldingDTO>) n;
+                }
+            }
+            if (viewedUserName != null && !nodes.isEmpty()) {
+                // "Your position" card: the last node buildOrderBookDetail adds when interactive.
+                final Node last = nodes.get(nodes.size() - 1);
+                if (last instanceof VBox) {
+                    harvestPositionCard((VBox) last);
+                }
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        private void harvestBookPanel(final VBox panel)
+        {
+            final HBox stats = (HBox) panel.getChildren().get(1);
+            final List<Label> labels = new ArrayList<>();
+            for (final Node statNode : stats.getChildren()) {
+                labels.add((Label) ((VBox) statNode).getChildren().get(1));
+            }
+            bookStatLabels.add(labels);
+            bidsTables.add((TableView<OrderDTO>) panel.getChildren().get(3));
+            asksTables.add((TableView<OrderDTO>) panel.getChildren().get(5));
+        }
+
+        /** positionCard's children are [title] alone before any trade (nothing to harvest - see
+         * hasHoldings above, which keeps this method from even being reached that early) or
+         * [title, optionCards, summaryStrip] once the viewer holds something. */
+        private void harvestPositionCard(final VBox positionCard)
+        {
+            if (positionCard.getChildren().size() < 3) {
+                return;
+            }
+            final FlowPane optionCards = (FlowPane) positionCard.getChildren().get(1);
+            positionSharesLabels = new ArrayList<>();
+            positionPaidLabels = new ArrayList<>();
+            for (final Node card : optionCards.getChildren()) {
+                final List<Node> cardChildren = ((VBox) card).getChildren();
+                positionSharesLabels.add((Label) cardChildren.get(1));
+                positionPaidLabels.add((Label) cardChildren.get(2));
+            }
+        }
+
+        private void patchValues(final OrderBookEventDetailsDTO dto)
+        {
+            balanceValueLabel.setText(money(dto.getAccountBalance()));
+
+            final List<OptionBookDTO> books = dto.getOptionBooks();
+            for (int i = 0; i < books.size(); i++) {
+                final OptionBookDTO book = books.get(i);
+                final List<Label> labels = bookStatLabels.get(i);
+                labels.get(0).setText(book.getLast() == null ? "—" : money(book.getLast()));
+                labels.get(1).setText(book.getBid() == null ? "—" : money(book.getBid()));
+                labels.get(2).setText(book.getAsk() == null ? "—" : money(book.getAsk()));
+                labels.get(3).setText(book.getMid() == null ? "—" : money(book.getMid()));
+                labels.get(4).setText(book.getSpread() == null ? "—" : money(book.getSpread()));
+                patchOrderTable(bidsTables.get(i), book.getBids());
+                patchOrderTable(asksTables.get(i), book.getAsks());
+            }
+
+            if (viewedUserName != null) {
+                if (positionSharesLabels != null) {
+                    ParticipantHoldingDTO mine = null;
+                    for (final ParticipantHoldingDTO p : dto.getParticipants()) {
+                        if (p.getUserName().equals(viewedUserName)) {
+                            mine = p;
+                            break;
+                        }
+                    }
+                    if (mine != null) {
+                        for (int i = 0; i < books.size() && i < positionSharesLabels.size(); i++) {
+                            positionSharesLabels.get(i).setText(mine.getHoldingsByOption().get(i) + " shares held");
+                            positionPaidLabels.get(i).setText("Paid: " + money(mine.getPaidByOption().get(i)));
+                        }
+                    }
+                }
+            } else if (participantsTable != null) {
+                patchParticipants(participantsTable, dto.getParticipants());
+            }
+        }
     }
 
     // ---------------------------------------------------------------- events: actions
@@ -1151,7 +1528,9 @@ public class MainController
         if (selected == null) {
             userAccountPane.getChildren().setAll(new Label("Select a user to see their account."));
             userDetailPane.getChildren().setAll(new Label("Select a user to see their details."));
-            lastRenderedAccountUser = null;
+            // The placeholder just replaced the live view's root, so the view has to be dropped
+            // too - otherwise reselecting would patch a node that is no longer on screen.
+            accountPaneView = null;
             lastRenderedUserDetailUser = null;
             return;
         }
@@ -1211,17 +1590,11 @@ public class MainController
 
     private void renderUserAccountPane(final UserSummaryDTO user)
     {
-        if (user == lastRenderedAccountUser) {
-            return;
+        if (accountPaneView == null) {
+            accountPaneView = new AccountPaneView();
+            userAccountPane.getChildren().setAll(accountPaneView.getRoot());
         }
-        lastRenderedAccountUser = user;
-
-        final Map<String, String> typedValues = captureFieldValues(userAccountPane);
-        final Double scroll = captureScroll(userAccountPane);
-        final boolean isSelf = user.getName().equals(Session.getUserName());
-        userAccountPane.getChildren().setAll(buildAccountPane(user, isSelf));
-        restoreFieldValues(userAccountPane, typedValues);
-        restoreScroll(userAccountPane, scroll);
+        accountPaneView.update(user);
     }
 
     /**
@@ -1270,19 +1643,106 @@ public class MainController
             historyCard.body().getChildren().add(placeholder("No account activity yet."));
         } else {
             for (final AccountEntryDTO entry : user.getAccountHistory()) {
-                final String sign = entry.getAmount() >= 0 ? "+" : "";
-                final Label row = new Label(String.format("[%s] %s: %s%s (balance after: %s)",
-                    entry.getAt().format(TIME_FORMAT), entry.getDescription(), sign, money(entry.getAmount()), money(entry.getBalanceAfter())));
-                row.getStyleClass().add(entry.getAmount() >= 0 ? "pl-positive" : "pl-negative");
-                // Without this, a narrow window (see the resize requirement) hard-truncates this
-                // with Label's default ellipsis instead of wrapping to a second line.
-                row.setWrapText(true);
-                historyCard.body().getChildren().add(row);
+                historyCard.body().getChildren().add(accountHistoryRow(entry));
             }
         }
         card.body().getChildren().add(historyCard.outer());
 
         return List.of(card.outer());
+    }
+
+    /** One line of the Account History log. Extracted so the first build and every later append
+     * (see AccountPaneView) format a row exactly the same way. */
+    private Label accountHistoryRow(final AccountEntryDTO entry)
+    {
+        final String sign = entry.getAmount() >= 0 ? "+" : "";
+        final Label row = new Label(String.format("[%s] %s: %s%s (balance after: %s)",
+            entry.getAt().format(TIME_FORMAT), entry.getDescription(), sign, money(entry.getAmount()), money(entry.getBalanceAfter())));
+        row.getStyleClass().add(entry.getAmount() >= 0 ? "pl-positive" : "pl-negative");
+        // Without this, a narrow window (see the resize requirement) hard-truncates this with
+        // Label's default ellipsis instead of wrapping to a second line.
+        row.setWrapText(true);
+        return row;
+    }
+
+    /**
+     * The Account tab's left-hand Account Details pane, built once and patched in place - the same
+     * treatment LmsrView/OrderBookView give the detail views, and for the same reason. This pane
+     * reacts to the viewer's own balance, which changes on every single trade they make, so the
+     * old rebuild-on-change approach threw this pane's scroll position to the top every time the
+     * user traded. Balance and Blocked are single Labels to retext; Account History only ever
+     * grows at the end, so new entries are appended rather than the whole log being rebuilt.
+     */
+    private final class AccountPaneView
+    {
+        private final VBox root = new VBox();
+        private String structuralKey;
+        private Label balanceLabel;
+        private Label blockedLabel;
+        private VBox historyBody;
+        private int lastHistoryCount = -1;
+
+        Node getRoot()
+        {
+            return root;
+        }
+
+        void update(final UserSummaryDTO user)
+        {
+            final boolean isSelf = user.getName().equals(Session.getUserName());
+            // Whose page this is decides whether Deposit is live, and an empty history renders a
+            // placeholder instead of rows - both change which nodes exist, so both belong here.
+            final String key = user.getName() + "|" + isSelf + "|" + user.getAccountHistory().isEmpty();
+            if (!key.equals(structuralKey)) {
+                rebuild(user, isSelf);
+                structuralKey = key;
+            } else {
+                patchValues(user);
+            }
+        }
+
+        private void rebuild(final UserSummaryDTO user, final boolean isSelf)
+        {
+            root.getChildren().setAll(buildAccountPane(user, isSelf));
+            harvest();
+            lastHistoryCount = user.getAccountHistory().size();
+        }
+
+        private void harvest()
+        {
+            final VBox cardOuter = (VBox) root.getChildren().get(0);
+            final VBox cardBody = (VBox) cardOuter.getChildren().get(1);
+            final FlowPane stats = (FlowPane) cardBody.getChildren().get(0);
+            balanceLabel = (Label) ((VBox) stats.getChildren().get(0)).getChildren().get(1);
+            blockedLabel = (Label) ((VBox) stats.getChildren().get(1)).getChildren().get(1);
+            final VBox historyOuter = (VBox) cardBody.getChildren().get(2);
+            historyBody = (VBox) historyOuter.getChildren().get(1);
+        }
+
+        private void patchValues(final UserSummaryDTO user)
+        {
+            balanceLabel.setText(money(user.getBalance()));
+            blockedLabel.setText(user.isBlocked() ? "Yes" : "No");
+            blockedLabel.getStyleClass().removeAll("pl-negative", "pl-positive");
+            blockedLabel.getStyleClass().add(user.isBlocked() ? "pl-negative" : "pl-positive");
+
+            final List<AccountEntryDTO> history = user.getAccountHistory();
+            if (history.size() != lastHistoryCount) {
+                if (lastHistoryCount >= 0 && history.size() > lastHistoryCount) {
+                    // Oldest-first here (unlike the reversed trade history), so new entries land
+                    // at the end - append only those, leaving every existing row untouched.
+                    for (final AccountEntryDTO entry : history.subList(lastHistoryCount, history.size())) {
+                        historyBody.getChildren().add(accountHistoryRow(entry));
+                    }
+                } else {
+                    historyBody.getChildren().clear();
+                    for (final AccountEntryDTO entry : history) {
+                        historyBody.getChildren().add(accountHistoryRow(entry));
+                    }
+                }
+                lastHistoryCount = history.size();
+            }
+        }
     }
 
     private void renderUserDetail(final UserSummaryDTO user)
@@ -1360,8 +1820,9 @@ public class MainController
                 populateSingleEventBox(selectedInlineEventName, singleEventBox, user.getName());
             } else {
                 selectedInlineEventName = null;
-                lastRenderedInlineEventDetail = null;
-                lastPopulatedSingleEventBox = null;
+                currentInlineEventName = null;
+                currentInlineBox = null;
+                currentInlineView = null;
                 singleEventBox.getChildren().add(placeholder("Click an event above to see its full details and trade here."));
             }
             singleEventCard.body().getChildren().add(singleEventBox);
@@ -1480,30 +1941,42 @@ public class MainController
 
     /**
      * Fills in the "Selected Event's Details & Trade" box for whichever event was last clicked in
-     * the Account tab's event list - reusing the exact same buildLmsrDetail/buildOrderBookDetail
-     * the Events tab itself uses, just with a real viewedUserName instead of null, so this is the
-     * same rendering, not a second copy. Buying/submitting an order still always acts as whoever
-     * is logged in regardless of viewedUserName (that's still an open question); only the
-     * Market-Maker open/close controls are gated by it so far.
+     * the Account tab's event list - backed by the same LmsrView/OrderBookView the Events tab
+     * itself uses, just constructed with a real viewedUserName instead of null. Buying/submitting
+     * an order still always acts as whoever is logged in regardless of viewedUserName (that's
+     * still an open question); only the Market-Maker open/close controls are gated by it so far.
+     * <p>
+     * box is a brand new VBox instance every time buildUserDetail rebuilds (switching which user's
+     * page you're on) - unlike eventDetailPane, which is one fixed FXML pane reused forever - so
+     * the view has to be keyed to *this specific box*, not just the event name: a different box
+     * always gets a fresh view, even for the exact same event, so it's never left unpopulated.
      */
     private void populateSingleEventBox(final String eventName, final VBox box, final String viewedUserName)
     {
         final Runnable onChange = () -> populateSingleEventBox(eventName, box, viewedUserName);
         runAsync(() -> ApiClient.getEventDetails(eventName), details -> {
-            if (box == lastPopulatedSingleEventBox && eventDetailsEqual(details, lastRenderedInlineEventDetail)) {
+            final boolean freshContext = box != currentInlineBox || !eventName.equals(currentInlineEventName);
+            if (freshContext) {
+                currentInlineBox = box;
+                currentInlineEventName = eventName;
+                if (details instanceof LmsrEventDetailsDTO) {
+                    final LmsrView view = new LmsrView(viewedUserName);
+                    view.update((LmsrEventDetailsDTO) details, onChange);
+                    currentInlineView = view;
+                    box.getChildren().setAll(view.getRoot());
+                } else {
+                    final OrderBookView view = new OrderBookView(viewedUserName);
+                    view.update((OrderBookEventDetailsDTO) details, onChange);
+                    currentInlineView = view;
+                    box.getChildren().setAll(view.getRoot());
+                }
                 return;
             }
-            lastPopulatedSingleEventBox = box;
-            lastRenderedInlineEventDetail = details;
-
-            final Map<String, String> typedValues = captureFieldValues(box);
-            final Double scroll = captureScroll(box);
-            final List<Node> content = details instanceof LmsrEventDetailsDTO
-                ? buildLmsrDetail((LmsrEventDetailsDTO) details, onChange, viewedUserName)
-                : buildOrderBookDetail((OrderBookEventDetailsDTO) details, onChange, viewedUserName);
-            box.getChildren().setAll(content);
-            restoreFieldValues(box, typedValues);
-            restoreScroll(box, scroll);
+            if (currentInlineView instanceof LmsrView) {
+                ((LmsrView) currentInlineView).update((LmsrEventDetailsDTO) details, onChange);
+            } else {
+                ((OrderBookView) currentInlineView).update((OrderBookEventDetailsDTO) details, onChange);
+            }
         });
     }
 
@@ -1755,90 +2228,9 @@ public class MainController
         return true;
     }
 
-    // ---------------------------------------------------------------- flicker gates: deep equals
-    // getEventDetails() hands back a brand-new DTO tree every poll tick even when nothing on the
-    // server actually changed, so unlike the Account tab's user object (see renderUserAccountPane),
-    // reference equality is useless here - these walk every field the detail views actually render
-    // (see buildLmsrDetail/buildOrderBookDetail) so a tick with identical data is recognized as such
-    // and the pane is left untouched. Anything not rendered anywhere (priceHistory/ChartPointDTO) is
-    // deliberately skipped, same reasoning as eventSummaryEquals/userSummaryEquals above.
-
-    private boolean eventDetailsEqual(final EventDetailsDTO x, final EventDetailsDTO y)
-    {
-        if (x == y) {
-            return true;
-        }
-        if (x == null || y == null) {
-            return false;
-        }
-        if (x instanceof LmsrEventDetailsDTO && y instanceof LmsrEventDetailsDTO) {
-            return lmsrDetailsEqual((LmsrEventDetailsDTO) x, (LmsrEventDetailsDTO) y);
-        }
-        if (x instanceof OrderBookEventDetailsDTO && y instanceof OrderBookEventDetailsDTO) {
-            return orderBookDetailsEqual((OrderBookEventDetailsDTO) x, (OrderBookEventDetailsDTO) y);
-        }
-        return false;
-    }
-
-    private boolean lmsrDetailsEqual(final LmsrEventDetailsDTO x, final LmsrEventDetailsDTO y)
-    {
-        return x.getName().equals(y.getName())
-            && x.getDescription().equals(y.getDescription())
-            && x.getCommission() == y.getCommission()
-            && x.getCommissionType().equals(y.getCommissionType())
-            && x.getStatus().equals(y.getStatus())
-            && Double.compare(x.getAccountBalance(), y.getAccountBalance()) == 0
-            && Double.compare(x.getTotalCommissionCollected(), y.getTotalCommissionCollected()) == 0
-            && Objects.equals(x.getWinningOptionName(), y.getWinningOptionName())
-            && x.getMarketMakerName().equals(y.getMarketMakerName())
-            && listsEqual(x.getOptions(), y.getOptions(), this::optionEqual)
-            && listsEqual(x.getTransactions(), y.getTransactions(), this::transactionEqual);
-    }
-
-    private boolean optionEqual(final OptionDTO x, final OptionDTO y)
-    {
-        return x.getName().equals(y.getName())
-            && x.getSharesBought() == y.getSharesBought()
-            && Double.compare(x.getCurrentProbability(), y.getCurrentProbability()) == 0;
-    }
-
-    private boolean transactionEqual(final TransactionDTO x, final TransactionDTO y)
-    {
-        return x.getUserName().equals(y.getUserName())
-            && x.getOptionName().equals(y.getOptionName())
-            && x.getQuantity() == y.getQuantity()
-            && Double.compare(x.getPricePaid(), y.getPricePaid()) == 0
-            && Double.compare(x.getCommissionPaid(), y.getCommissionPaid()) == 0
-            && x.getTimestamp().equals(y.getTimestamp());
-    }
-
-    private boolean orderBookDetailsEqual(final OrderBookEventDetailsDTO x, final OrderBookEventDetailsDTO y)
-    {
-        return x.getName().equals(y.getName())
-            && x.getDescription().equals(y.getDescription())
-            && x.getCommission() == y.getCommission()
-            && x.getCommissionType().equals(y.getCommissionType())
-            && x.getStatus().equals(y.getStatus())
-            && Double.compare(x.getAccountBalance(), y.getAccountBalance()) == 0
-            && x.getBaseValue() == y.getBaseValue()
-            && x.isAllowMint() == y.isAllowMint()
-            && Objects.equals(x.getWinningOptionName(), y.getWinningOptionName())
-            && x.getMarketMakerName().equals(y.getMarketMakerName())
-            && listsEqual(x.getOptionBooks(), y.getOptionBooks(), this::optionBookEqual)
-            && listsEqual(x.getParticipants(), y.getParticipants(), this::participantEqual);
-    }
-
-    private boolean optionBookEqual(final OptionBookDTO x, final OptionBookDTO y)
-    {
-        return x.getOptionName().equals(y.getOptionName())
-            && Objects.equals(x.getLast(), y.getLast())
-            && Objects.equals(x.getBid(), y.getBid())
-            && Objects.equals(x.getAsk(), y.getAsk())
-            && Objects.equals(x.getMid(), y.getMid())
-            && Objects.equals(x.getSpread(), y.getSpread())
-            && listsEqual(x.getBids(), y.getBids(), this::orderEqual)
-            && listsEqual(x.getAsks(), y.getAsks(), this::orderEqual);
-    }
+    // ---------------------------------------------------------------- table-row equality
+    // Used only by the scoped exceptions in patchOrderTable/patchParticipants above - everything
+    // else in the live detail views patches Labels directly instead of comparing DTOs.
 
     private boolean orderEqual(final OrderDTO x, final OrderDTO y)
     {
