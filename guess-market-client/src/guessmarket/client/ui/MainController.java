@@ -28,11 +28,13 @@ import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.event.Event;
 import javafx.fxml.FXML;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.StrokeType;
@@ -48,6 +50,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Separator;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -60,6 +63,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
@@ -487,7 +491,7 @@ public class MainController
         // everyone's. The read-only Events tab has no single viewer, so it keeps the event-wide
         // total there.
         final String commissionLabel = interactive ? "Your commission" : "Commission collected";
-        final double commissionValue = interactive ? dto.getCommissionPaidBy(Session.getUserName()) : dto.getTotalCommissionCollected();
+        final double commissionValue = interactive ? dto.getCommissionPaidBy(viewedUserName) : dto.getTotalCommissionCollected();
         nodes.add(detailHeader(dto.getName(), dto.getDescription(), dto.getStatus(), dto.getMarketMakerName(),
             readableCommission(dto.getCommissionType()) + " · " + dto.getCommission() + "%",
             "Account balance", money(dto.getAccountBalance()),
@@ -547,13 +551,15 @@ public class MainController
 
     /** Most recent first - matching Ex2 exactly (getTransactions() is oldest-first, so newest ends
      * up on top here, same as everywhere else trade history is shown). Interactive (Account tab)
-     * filters down to just the viewer's own trades; the read-only Events tab keeps everyone's. */
+     * filters down to just the viewed page's own trades - viewedUserName, not the logged-in user,
+     * since this also has to work correctly when browsing someone else's page; the read-only Events
+     * tab keeps everyone's. */
     private List<TransactionDTO> filteredLmsrHistory(final LmsrEventDetailsDTO dto, final String viewedUserName)
     {
         final List<TransactionDTO> history = new ArrayList<>(dto.getTransactions());
         Collections.reverse(history);
         if (viewedUserName != null) {
-            history.removeIf(tx -> !tx.getUserName().equals(Session.getUserName()));
+            history.removeIf(tx -> !tx.getUserName().equals(viewedUserName));
         }
         return history;
     }
@@ -578,15 +584,26 @@ public class MainController
         qtySpinner.setEditable(true);
         qtySpinner.setPrefWidth(100);
         qtySpinner.setDisable(true);
+        // A disabled node doesn't fire the mouse-entered event the "pick an option" tooltip below
+        // needs (see withDisabledTooltip's own comment on this) - mouse-transparent lets hover pass
+        // through to the wrapper around it instead, same trick, kept in sync with setDisable below.
+        qtySpinner.setMouseTransparent(true);
 
         final Button buyBtn = new Button("Buy Shares");
         buyBtn.getStyleClass().add("primary-button");
         buyBtn.setDisable(true);
+        buyBtn.setMouseTransparent(true);
 
         final Label pickHint = new Label("Click an option below to trade it ↓");
         pickHint.getStyleClass().add("hint-chip");
         final HBox pickHintWrap = new HBox(pickHint);
         pickHintWrap.setAlignment(Pos.CENTER);
+
+        final HBox pickFirstWrap = new HBox();
+        pickFirstWrap.setAlignment(Pos.CENTER);
+        final Tooltip pickFirstTooltip = new Tooltip("Select an option above first.");
+        pickFirstTooltip.setShowDelay(Duration.millis(150));
+        Tooltip.install(pickFirstWrap, pickFirstTooltip);
 
         final FlowPane cardsRow = new FlowPane(12, 10);
         cardsRow.setAlignment(Pos.CENTER);
@@ -602,7 +619,12 @@ public class MainController
                     c.getStyleClass().add(j == idx ? "price-card-selected" : "price-card");
                 }
                 qtySpinner.setDisable(false);
+                qtySpinner.setMouseTransparent(false);
                 buyBtn.setDisable(false);
+                buyBtn.setMouseTransparent(false);
+                // Nothing left to explain once an option is picked - without this, hovering the
+                // now-enabled Buy button would still show the "select an option" hint underneath it.
+                Tooltip.uninstall(pickFirstWrap, pickFirstTooltip);
             });
             cardNodes.add(card);
             cardsRow.getChildren().add(card);
@@ -622,8 +644,9 @@ public class MainController
         final VBox controls = new VBox(8, centerLabel(qtyCaption), qtySpinner, buyBtn);
         controls.setAlignment(Pos.CENTER);
         controls.setPadding(new Insets(4, 0, 10, 0));
+        pickFirstWrap.getChildren().add(controls);
 
-        final VBox box = new VBox(10, pickHintWrap, cardsRow, withDisabledTooltip(controls, isSelf, NOT_YOURSELF_MESSAGE));
+        final VBox box = new VBox(10, pickHintWrap, cardsRow, withDisabledTooltip(pickFirstWrap, isSelf, NOT_YOURSELF_MESSAGE));
         box.setAlignment(Pos.CENTER);
         return box;
     }
@@ -959,7 +982,7 @@ public class MainController
         {
             balanceValueLabel.setText(money(dto.getAccountBalance()));
             final double commissionValue = viewedUserName != null
-                ? dto.getCommissionPaidBy(Session.getUserName())
+                ? dto.getCommissionPaidBy(viewedUserName)
                 : dto.getTotalCommissionCollected();
             commissionValueLabel.setText(money(commissionValue));
 
@@ -1440,10 +1463,19 @@ public class MainController
             return;
         }
 
+        // Neutral again for the new pick, before we know whether the server will accept it - a
+        // stale green/red from the previous upload would otherwise wrongly describe this new file.
+        filePathLabel.getStyleClass().removeAll("filepath-label-accepted", "filepath-label-rejected");
         filePathLabel.setText(file.getAbsolutePath());
         runAsync(() -> uploadFile(file), () -> {
+            filePathLabel.getStyleClass().add("filepath-label-accepted");
+            filePathLabel.setText("✓ " + file.getAbsolutePath());
             refreshEvents();
             refreshUsers();
+        }, ex -> {
+            filePathLabel.getStyleClass().add("filepath-label-rejected");
+            filePathLabel.setText("✗ " + file.getAbsolutePath());
+            showError(ex.getMessage());
         });
     }
 
@@ -1642,9 +1674,7 @@ public class MainController
         if (user.getAccountHistory().isEmpty()) {
             historyCard.body().getChildren().add(placeholder("No account activity yet."));
         } else {
-            for (final AccountEntryDTO entry : user.getAccountHistory()) {
-                historyCard.body().getChildren().add(accountHistoryRow(entry));
-            }
+            appendHistoryRows(historyCard.body(), user.getAccountHistory(), null);
         }
         card.body().getChildren().add(historyCard.outer());
 
@@ -1665,6 +1695,44 @@ public class MainController
         return row;
     }
 
+    /** A centered day header above that day's Account History rows - the same "chat-date-divider"
+     * pill style the Chat tab already uses for its own day dividers, so a long-lived account's
+     * history groups by day the same recognizable way a multi-day chat log does. */
+    private HBox accountDateDivider(final LocalDate date)
+    {
+        final Label dateLabel = new Label(date.format(CHAT_DATE_FORMAT));
+        dateLabel.getStyleClass().add("chat-date-divider");
+        final HBox wrap = new HBox(dateLabel);
+        wrap.setAlignment(Pos.CENTER);
+        wrap.setPadding(new Insets(10, 0, 6, 0));
+        wrap.setAccessibleText("Account activity from " + date.format(CHAT_DATE_FORMAT));
+        return wrap;
+    }
+
+    /**
+     * Appends entries onto target, one row each, inserting an accountDateDivider whenever the
+     * calendar day changes from lastDate - the date of whatever is already rendered before this
+     * call, or null when target starts empty. Shared by the fresh build (buildAccountPane, entire
+     * history, lastDate null) and every later incremental append (AccountPaneView.patchValues, just
+     * the new suffix, lastDate carried over from the previous call) so both group entries by day
+     * exactly the same way. Existing children are never touched - only ever appended to - which is
+     * what keeps this safe for the append-only history pane the flicker rewrite depends on.
+     * Returns the date of the last entry appended, for a caller that needs to remember it for next
+     * time (see AccountPaneView.lastHistoryDate).
+     */
+    private LocalDate appendHistoryRows(final VBox target, final List<AccountEntryDTO> entries, LocalDate lastDate)
+    {
+        for (final AccountEntryDTO entry : entries) {
+            final LocalDate date = entry.getAt().toLocalDate();
+            if (!date.equals(lastDate)) {
+                target.getChildren().add(accountDateDivider(date));
+                lastDate = date;
+            }
+            target.getChildren().add(accountHistoryRow(entry));
+        }
+        return lastDate;
+    }
+
     /**
      * The Account tab's left-hand Account Details pane, built once and patched in place - the same
      * treatment LmsrView/OrderBookView give the detail views, and for the same reason. This pane
@@ -1681,6 +1749,7 @@ public class MainController
         private Label blockedLabel;
         private VBox historyBody;
         private int lastHistoryCount = -1;
+        private LocalDate lastHistoryDate;
 
         Node getRoot()
         {
@@ -1705,7 +1774,9 @@ public class MainController
         {
             root.getChildren().setAll(buildAccountPane(user, isSelf));
             harvest();
-            lastHistoryCount = user.getAccountHistory().size();
+            final List<AccountEntryDTO> history = user.getAccountHistory();
+            lastHistoryCount = history.size();
+            lastHistoryDate = history.isEmpty() ? null : history.get(history.size() - 1).getAt().toLocalDate();
         }
 
         private void harvest()
@@ -1730,15 +1801,12 @@ public class MainController
             if (history.size() != lastHistoryCount) {
                 if (lastHistoryCount >= 0 && history.size() > lastHistoryCount) {
                     // Oldest-first here (unlike the reversed trade history), so new entries land
-                    // at the end - append only those, leaving every existing row untouched.
-                    for (final AccountEntryDTO entry : history.subList(lastHistoryCount, history.size())) {
-                        historyBody.getChildren().add(accountHistoryRow(entry));
-                    }
+                    // at the end - append only those, leaving every existing row (and every date
+                    // divider already among them) untouched.
+                    lastHistoryDate = appendHistoryRows(historyBody, history.subList(lastHistoryCount, history.size()), lastHistoryDate);
                 } else {
                     historyBody.getChildren().clear();
-                    for (final AccountEntryDTO entry : history) {
-                        historyBody.getChildren().add(accountHistoryRow(entry));
-                    }
+                    lastHistoryDate = appendHistoryRows(historyBody, history, null);
                 }
                 lastHistoryCount = history.size();
             }
@@ -1858,6 +1926,7 @@ public class MainController
         card.setOnMouseClicked(event -> {
             selectedInlineEventName = eventName;
             populateSingleEventBox(eventName, singleEventBox, userName);
+            scrollToReveal(singleEventBox);
         });
 
         if (summary == null) {
@@ -2043,7 +2112,10 @@ public class MainController
         dialog.setHeaderText("New event, with " + Session.getUserName() + " as its Market Maker");
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         dialog.getDialogPane().setContent(form);
-        dialog.getDialogPane().getStylesheets().addAll(userDetailPane.getScene().getStylesheets());
+        // Scene.getStylesheets() is empty - main.fxml's stylesheets="@app.css" lives on the root
+        // node instead (see showError's own note on this same mistake), so this has to come from
+        // getRoot().getStylesheets(), not the Scene directly.
+        dialog.getDialogPane().getStylesheets().addAll(userDetailPane.getScene().getRoot().getStylesheets());
         // Not user-resizable: dragging the edge only ever stretched the window, never the fields
         // inside it, which looked broken rather than useful. The window still resizes itself
         // programmatically below, when switching between LMSR and Order Book - setResizable(false)
@@ -2357,6 +2429,42 @@ public class MainController
         return null;
     }
 
+    /**
+     * Scrolls the ancestor ScrollPane down just far enough to bring target into view - used when a
+     * click populates content further down the same scrollable pane (the inline single-event box in
+     * the Account tab's participation list), so the result of the click isn't silently sitting below
+     * the fold with nothing on screen to show it happened. Never scrolls when target is already
+     * visible, and never scrolls up - this only ever reacts to something new appearing below.
+     * Runs after a layout pulse, same reasoning as restoreScroll: target's bounds aren't final in
+     * the same pulse that just added or repopulated it.
+     */
+    private void scrollToReveal(final Node target)
+    {
+        final ScrollPane scrollPane = findAncestorScrollPane(target);
+        if (scrollPane == null || scrollPane.getContent() == null) {
+            return;
+        }
+        Platform.runLater(() -> {
+            final Node content = scrollPane.getContent();
+            final double contentHeight = content.getBoundsInLocal().getHeight();
+            final double viewportHeight = scrollPane.getViewportBounds().getHeight();
+            final double scrollable = contentHeight - viewportHeight;
+            if (scrollable <= 0) {
+                return;
+            }
+            final Bounds targetInContent = content.sceneToLocal(target.localToScene(target.getBoundsInLocal()));
+            final double viewTop = scrollPane.getVvalue() * scrollable;
+            final double viewBottom = viewTop + viewportHeight;
+            if (targetInContent.getMaxY() <= viewBottom) {
+                return;
+            }
+            // Bring the target's bottom just inside the viewport - but never scroll so far that its
+            // own top runs off the top, for a target taller than the viewport itself.
+            final double desiredTop = Math.max(targetInContent.getMinY() - 12, targetInContent.getMaxY() - viewportHeight);
+            scrollPane.setVvalue(Math.max(0, Math.min(1, desiredTop / scrollable)));
+        });
+    }
+
     private VBox priceCard(final OptionDTO option, final boolean isWinner)
     {
         final HBox nameRow = isWinner
@@ -2550,13 +2658,57 @@ public class MainController
         return "pill-notactive";
     }
 
+    // Two rounds of trying to make JavaFX's built-in Alert/DialogPane wrap and size correctly both
+    // failed - its internal skin keeps a "content.label" style rule and its own layout pass timing
+    // that no amount of poking from outside (pinning width, deferring a resize) reliably overrides,
+    // and it's not worth a third round of guessing at its internals. This sidesteps Alert entirely:
+    // a plain Stage with a Scene whose root is a VBox sizes itself to that Scene's actual computed
+    // preferred size when shown (standard JavaFX behavior, nothing special needed) - so a wrapped
+    // Label's true multi-line height is correctly known and honored the first time, every time.
     private void showError(final String message)
     {
-        final Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle("Guess Market");
-        alert.setHeaderText("Something went wrong");
-        alert.setContentText(message);
-        alert.showAndWait();
+        final Label icon = new Label("!");
+        icon.getStyleClass().add("error-dialog-icon");
+
+        final Label header = new Label("Something went wrong");
+        header.getStyleClass().add("error-dialog-header");
+
+        final Label content = new Label(message);
+        content.setWrapText(true);
+        content.setMinWidth(360);
+        content.setMaxWidth(360);
+        content.setPrefWidth(360);
+        content.getStyleClass().add("error-dialog-message");
+
+        final VBox textColumn = new VBox(8, header, content);
+        final HBox topRow = new HBox(16, icon, textColumn);
+        topRow.setAlignment(Pos.TOP_LEFT);
+
+        final Button okButton = new Button("OK");
+        okButton.getStyleClass().add("primary-button");
+        final HBox buttonRow = new HBox(okButton);
+        buttonRow.setAlignment(Pos.CENTER_RIGHT);
+
+        final VBox box = new VBox(18, topRow, new Separator(), buttonRow);
+        box.setPadding(new Insets(22));
+        box.getStyleClass().add("error-dialog");
+
+        final Stage dialog = new Stage();
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.initOwner(loadFileButton.getScene().getWindow());
+        dialog.setTitle("Guess Market");
+        dialog.setResizable(false);
+
+        final Scene scene = new Scene(box);
+        // main.fxml puts stylesheets="@app.css" on its own root node (Parent.getStylesheets()),
+        // not on the Scene (Scene.getStylesheets(), a separate, unrelated list) - copying from the
+        // Scene the way an earlier version of this did copies nothing, which is why the dialog was
+        // rendering in plain default JavaFX styling with none of the app's own colors or classes.
+        scene.getStylesheets().addAll(loadFileButton.getScene().getRoot().getStylesheets());
+        dialog.setScene(scene);
+
+        okButton.setOnAction(event -> dialog.close());
+        dialog.showAndWait();
     }
 
     /**
@@ -2568,6 +2720,13 @@ public class MainController
      */
     private <T> void runAsync(final Supplier<T> backgroundWork, final Consumer<T> onSuccess)
     {
+        runAsync(backgroundWork, onSuccess, ex -> showError(ex.getMessage()));
+    }
+
+    // Same as the two-argument overload, but lets a specific call site react to failure itself
+    // (e.g. marking a row red) in addition to the usual error dialog, instead of only getting it.
+    private <T> void runAsync(final Supplier<T> backgroundWork, final Consumer<T> onSuccess, final Consumer<Throwable> onFailure)
+    {
         final Task<T> task = new Task<T>()
         {
             @Override
@@ -2577,7 +2736,7 @@ public class MainController
             }
         };
         task.setOnSucceeded(event -> onSuccess.accept(task.getValue()));
-        task.setOnFailed(event -> showError(task.getException().getMessage()));
+        task.setOnFailed(event -> onFailure.accept(task.getException()));
         new Thread(task).start();
     }
 
@@ -2587,6 +2746,14 @@ public class MainController
             backgroundWork.run();
             return null;
         }, ignored -> onSuccess.run());
+    }
+
+    private void runAsync(final Runnable backgroundWork, final Runnable onSuccess, final Consumer<Throwable> onFailure)
+    {
+        runAsync(() -> {
+            backgroundWork.run();
+            return null;
+        }, ignored -> onSuccess.run(), onFailure);
     }
 
     /**

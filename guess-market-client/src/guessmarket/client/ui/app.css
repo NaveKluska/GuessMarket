@@ -77,6 +77,19 @@
     -fx-text-overrun: ellipsis;
 }
 
+/* Same row, after the server has actually answered - accepted or rejected - reusing the exact
+   soft green/red already used for the ACTIVE/CLOSED pills elsewhere, so this reads as consistent
+   with the rest of the app instead of introducing a new color pairing. */
+.filepath-label-accepted {
+    -fx-text-fill: -gm-positive;
+    -fx-background-color: -gm-positive-soft;
+}
+
+.filepath-label-rejected {
+    -fx-text-fill: -gm-negative;
+    -fx-background-color: -gm-negative-soft;
+}
+
 /* Bonus: the animations switch. Shaped like the pills used elsewhere and tinted with the accent
    colour while on, so whether animations are currently enabled is obvious at a glance rather than
    depending on spotting a small tick. */
@@ -585,6 +598,37 @@
 
 .login-card {
     -fx-background-color: -gm-surface;
+}
+
+/* The plain-Stage error dialog (showError) - deliberately not reusing .login-card's exact look,
+   just the same surface/border language the rest of the app already uses. */
+.error-dialog {
+    -fx-background-color: -gm-surface;
+}
+
+.error-dialog-header {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -gm-negative;
+}
+
+.error-dialog-message {
+    -fx-text-fill: -gm-text;
+}
+
+/* A solid circle with a bold "!" - the standard error-icon shape, sized and colored to match this
+   app's own palette instead of the OS's native icon set. */
+.error-dialog-icon {
+    -fx-min-width: 34;
+    -fx-min-height: 34;
+    -fx-max-width: 34;
+    -fx-max-height: 34;
+    -fx-background-color: -gm-negative;
+    -fx-background-radius: 999;
+    -fx-text-fill: white;
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-alignment: center;
 }
 
 .login-title {

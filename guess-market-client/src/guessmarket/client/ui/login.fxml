@@ -15,7 +15,7 @@
         <padding><Insets top="36" right="36" bottom="36" left="36"/></padding>
 
         <Label text="Guess Market" styleClass="login-title"/>
-        <Label text="Enter a name to join - new names register automatically." styleClass="login-subtitle" wrapText="true"/>
+        <Label text="Enter a name to continue." styleClass="login-subtitle" wrapText="true"/>
 
         <TextField fx:id="nameField" promptText="Your name"/>
         <Button fx:id="continueButton" text="Continue" maxWidth="Infinity" defaultButton="true" styleClass="primary-button"/>
