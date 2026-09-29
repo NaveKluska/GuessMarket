@@ -1,0 +1,100 @@
+{
+  "info": {
+    "name": "Guess Market - Load & Demo Collection",
+    "description": "Seeds the Guess Market Ex3 server with a realistic batch of users, events, trades, orders and chat messages, entirely over the same HTTP API the JavaFX client uses. Run folders 1-4 once to set up a populated app. Run folders 5-7 as many times as you like (individually, or via Postman's Collection Runner with a higher iteration count) to keep piling on more trading/chat activity - useful for seeing the app under sustained load rather than a single empty snapshot. Folder 8 is just read-only polling, matching what each client already does once a second.\n\nAssumes the server is running at localhost:8080 (the app's own hardcoded default) with a fresh/empty state.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/guessmarket", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1 - Setup: Register & Fund Users",
+      "item": [
+        { "name": "Register alice", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"name\": \"alice\"}"}, "url": "{{baseUrl}}/users/register" } },
+        { "name": "Register bob", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"name\": \"bob\"}"}, "url": "{{baseUrl}}/users/register" } },
+        { "name": "Register carol", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"name\": \"carol\"}"}, "url": "{{baseUrl}}/users/register" } },
+        { "name": "Register dave", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"name\": \"dave\"}"}, "url": "{{baseUrl}}/users/register" } },
+        { "name": "Register erin", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"name\": \"erin\"}"}, "url": "{{baseUrl}}/users/register" } },
+        { "name": "Register frank", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"name\": \"frank\"}"}, "url": "{{baseUrl}}/users/register" } },
+        { "name": "Register grace", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"name\": \"grace\"}"}, "url": "{{baseUrl}}/users/register" } },
+        { "name": "Register heidi", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"name\": \"heidi\"}"}, "url": "{{baseUrl}}/users/register" } },
+        { "name": "Deposit alice", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"alice\", \"amount\": 3000}"}, "url": "{{baseUrl}}/users/deposit" } },
+        { "name": "Deposit bob", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"bob\", \"amount\": 3000}"}, "url": "{{baseUrl}}/users/deposit" } },
+        { "name": "Deposit carol", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"carol\", \"amount\": 3000}"}, "url": "{{baseUrl}}/users/deposit" } },
+        { "name": "Deposit dave", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"dave\", \"amount\": 3000}"}, "url": "{{baseUrl}}/users/deposit" } },
+        { "name": "Deposit erin", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"erin\", \"amount\": 3000}"}, "url": "{{baseUrl}}/users/deposit" } },
+        { "name": "Deposit frank", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"frank\", \"amount\": 3000}"}, "url": "{{baseUrl}}/users/deposit" } },
+        { "name": "Deposit grace", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"grace\", \"amount\": 3000}"}, "url": "{{baseUrl}}/users/deposit" } },
+        { "name": "Deposit heidi", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"heidi\", \"amount\": 3000}"}, "url": "{{baseUrl}}/users/deposit" } }
+      ]
+    },
+    {
+      "name": "2 - Setup: Create Events (LMSR)",
+      "item": [
+        { "name": "Create: Record Rainfall This Month", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"creatorName\": \"alice\", \"name\": \"Record Rainfall This Month\", \"description\": \"Will this month break the local rainfall record?\", \"commission\": 5, \"commissionType\": \"ON_PURCHASE\", \"optionNames\": [\"Yes\", \"No\"], \"b\": 120}"}, "url": "{{baseUrl}}/events/create-lmsr" } },
+        { "name": "Create: New Cafe Survives Year One", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"creatorName\": \"bob\", \"name\": \"New Cafe Survives Year One\", \"description\": \"Will the new cafe downtown still be open in 12 months?\", \"commission\": 8, \"commissionType\": \"ON_CLOSE\", \"optionNames\": [\"Yes\", \"No\"], \"b\": 90}"}, "url": "{{baseUrl}}/events/create-lmsr" } },
+        { "name": "Create: Local Band Signs Label", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"creatorName\": \"carol\", \"name\": \"Local Band Signs Label\", \"description\": \"Will the local band sign with a record label this year?\", \"commission\": 4, \"commissionType\": \"ON_PURCHASE\", \"optionNames\": [\"Yes\", \"No\"], \"b\": 100}"}, "url": "{{baseUrl}}/events/create-lmsr" } }
+      ]
+    },
+    {
+      "name": "3 - Setup: Create Events (Order Book)",
+      "item": [
+        { "name": "Create: Farmers Market Expands", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"creatorName\": \"dave\", \"name\": \"Farmers Market Expands\", \"description\": \"Will the farmers market add a second weekly day?\", \"commission\": 3, \"commissionType\": \"ON_PURCHASE\", \"optionNames\": [\"Yes\", \"No\"], \"allowMint\": true, \"initial\": 60, \"d\": 1}"}, "url": "{{baseUrl}}/events/create-orderbook" } },
+        { "name": "Create: Local Team Makes Playoffs", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"creatorName\": \"erin\", \"name\": \"Local Team Makes Playoffs\", \"description\": \"Will the local team make the playoffs this season?\", \"commission\": 2, \"commissionType\": \"ON_CLOSE\", \"optionNames\": [\"Yes\", \"No\"], \"allowMint\": true, \"initial\": 50, \"d\": 1}"}, "url": "{{baseUrl}}/events/create-orderbook" } },
+        { "name": "Create: Library Extends Hours", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"creatorName\": \"frank\", \"name\": \"Library Extends Hours\", \"description\": \"Will the public library extend its weekend hours?\", \"commission\": 3, \"commissionType\": \"ON_PURCHASE\", \"optionNames\": [\"Yes\", \"No\"], \"allowMint\": false, \"initial\": 40, \"d\": 1}"}, "url": "{{baseUrl}}/events/create-orderbook" } }
+      ]
+    },
+    {
+      "name": "4 - Open Events",
+      "item": [
+        { "name": "Open: Record Rainfall This Month", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"mmName\": \"alice\", \"eventName\": \"Record Rainfall This Month\"}"}, "url": "{{baseUrl}}/events/open" } },
+        { "name": "Open: New Cafe Survives Year One", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"mmName\": \"bob\", \"eventName\": \"New Cafe Survives Year One\"}"}, "url": "{{baseUrl}}/events/open" } },
+        { "name": "Open: Farmers Market Expands", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"mmName\": \"dave\", \"eventName\": \"Farmers Market Expands\"}"}, "url": "{{baseUrl}}/events/open" } },
+        { "name": "Open: Local Team Makes Playoffs", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"mmName\": \"erin\", \"eventName\": \"Local Team Makes Playoffs\"}"}, "url": "{{baseUrl}}/events/open" } }
+      ]
+    },
+    {
+      "name": "5 - Flood: Buy Shares (LMSR)",
+      "description": "Safe to run this whole folder repeatedly (or via Collection Runner with N iterations) to keep generating more trades.",
+      "item": [
+        { "name": "carol buys Yes on Rainfall", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"memberName\": \"carol\", \"eventName\": \"Record Rainfall This Month\", \"optionIndex\": 0, \"quantity\": 3}"}, "url": "{{baseUrl}}/events/buy" } },
+        { "name": "dave buys No on Rainfall", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"memberName\": \"dave\", \"eventName\": \"Record Rainfall This Month\", \"optionIndex\": 1, \"quantity\": 2}"}, "url": "{{baseUrl}}/events/buy" } },
+        { "name": "erin buys Yes on Cafe", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"memberName\": \"erin\", \"eventName\": \"New Cafe Survives Year One\", \"optionIndex\": 0, \"quantity\": 4}"}, "url": "{{baseUrl}}/events/buy" } },
+        { "name": "frank buys No on Cafe", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"memberName\": \"frank\", \"eventName\": \"New Cafe Survives Year One\", \"optionIndex\": 1, \"quantity\": 2}"}, "url": "{{baseUrl}}/events/buy" } },
+        { "name": "grace buys Yes on Rainfall", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"memberName\": \"grace\", \"eventName\": \"Record Rainfall This Month\", \"optionIndex\": 0, \"quantity\": 1}"}, "url": "{{baseUrl}}/events/buy" } },
+        { "name": "heidi buys No on Cafe", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"memberName\": \"heidi\", \"eventName\": \"New Cafe Survives Year One\", \"optionIndex\": 1, \"quantity\": 3}"}, "url": "{{baseUrl}}/events/buy" } }
+      ]
+    },
+    {
+      "name": "6 - Flood: Submit Orders (Order Book)",
+      "description": "Safe to run this whole folder repeatedly (or via Collection Runner with N iterations) to keep generating more order activity. Important: a SELL only ever succeeds if that user already holds real shares of that option (checked in MarketEngineImpl.submitOrder before any matching happens) - there is no 'sell to mint from nothing'. The only participant who starts holding real shares is the event's own Market Maker, who is automatically granted 'initial' shares of every option the moment the event opens. So every SELL leg below is performed by that event's actual MM, matched against a fresh trader's resting BUY - not by two random traders.",
+      "item": [
+        { "name": "carol BUY on Farmers Market", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"carol\", \"eventName\": \"Farmers Market Expands\", \"optionIndex\": 0, \"side\": \"BUY\", \"price\": 0.5, \"quantity\": 4}"}, "url": "{{baseUrl}}/events/order" } },
+        { "name": "dave (MM) SELL on Farmers Market", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"dave\", \"eventName\": \"Farmers Market Expands\", \"optionIndex\": 0, \"side\": \"SELL\", \"price\": 0.5, \"quantity\": 2}"}, "url": "{{baseUrl}}/events/order" } },
+        { "name": "grace BUY on Playoffs", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"grace\", \"eventName\": \"Local Team Makes Playoffs\", \"optionIndex\": 0, \"side\": \"BUY\", \"price\": 0.6, \"quantity\": 3}"}, "url": "{{baseUrl}}/events/order" } },
+        { "name": "erin (MM) SELL on Playoffs", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"erin\", \"eventName\": \"Local Team Makes Playoffs\", \"optionIndex\": 0, \"side\": \"SELL\", \"price\": 0.6, \"quantity\": 1}"}, "url": "{{baseUrl}}/events/order" } },
+        { "name": "grace BUY (resting, no fill) on Farmers Market", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"grace\", \"eventName\": \"Farmers Market Expands\", \"optionIndex\": 1, \"side\": \"BUY\", \"price\": 0.35, \"quantity\": 2}"}, "url": "{{baseUrl}}/events/order" } }
+      ]
+    },
+    {
+      "name": "7 - Flood: Chat Messages",
+      "description": "Safe to run this whole folder repeatedly (or via Collection Runner with N iterations) to keep growing the chat log.",
+      "item": [
+        { "name": "alice says hi", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"alice\", \"message\": \"Rainfall event is open, good luck everyone!\"}"}, "url": "{{baseUrl}}/chat" } },
+        { "name": "bob says hi", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"bob\", \"message\": \"Cafe event is live too.\"}"}, "url": "{{baseUrl}}/chat" } },
+        { "name": "carol chats", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"carol\", \"message\": \"Just bought some Yes shares.\"}"}, "url": "{{baseUrl}}/chat" } },
+        { "name": "dave chats", "request": { "method": "POST", "header": [{"key":"Content-Type","value":"application/json"}], "body": {"mode":"raw","raw":"{\"userName\": \"dave\", \"message\": \"Anyone else watching the order book?\"}"}, "url": "{{baseUrl}}/chat" } }
+      ]
+    },
+    {
+      "name": "8 - Read: Poll Everything",
+      "description": "The same three reads every client performs once a second - useful to just eyeball the current full state.",
+      "item": [
+        { "name": "GET all events", "request": { "method": "GET", "url": "{{baseUrl}}/events" } },
+        { "name": "GET all users", "request": { "method": "GET", "url": "{{baseUrl}}/users" } },
+        { "name": "GET all chat", "request": { "method": "GET", "url": "{{baseUrl}}/chat" } }
+      ]
+    }
+  ]
+}
