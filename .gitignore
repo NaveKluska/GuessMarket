@@ -40,3 +40,6 @@ guess-market-client/build/
 
 # Sample XML files for manually testing the upload feature, not project state
 test-uploads/
+
+# Web client libraries - downloaded by npm install (run.bat does it), never committed
+node_modules/
