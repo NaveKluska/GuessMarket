@@ -108,9 +108,7 @@ public class MarketEngineImpl implements MarketEngine
 
         synchronized (events) {
             for (final Event event : parsedEvents) {
-                if (events.containsKey(event.getName())) {
-                    throw new IllegalArgumentException("An event named '" + event.getName() + "' already exists.");
-                }
+                requireEventNameAvailable(event.getName());
             }
 
             for (final Event event : parsedEvents) {
@@ -399,6 +397,17 @@ public class MarketEngineImpl implements MarketEngine
         return event;
     }
 
+    // The Ex3 schema dropped event ids - an event is now identified by its name alone - so, like
+    // usernames and option names, two names differing only in letter case are the same event.
+    // Callers hold the events lock, so the check and the insert that follows are atomic.
+    private void requireEventNameAvailable(final String name) {
+        for (final String existingName : events.keySet()) {
+            if (existingName.equalsIgnoreCase(name)) {
+                throw new IllegalArgumentException("An event named '" + existingName + "' already exists.");
+            }
+        }
+    }
+
     private User requireUser(final String userName) {
         if (userName == null) {
             throw new IllegalArgumentException("Username cannot be null.");
@@ -447,9 +456,7 @@ public class MarketEngineImpl implements MarketEngine
 
     private void registerCreatedEvent(final Event created, final String creatorName, final User creator) {
         synchronized (events) {
-            if (events.containsKey(created.getName())) {
-                throw new IllegalArgumentException("An event named '" + created.getName() + "' already exists.");
-            }
+            requireEventNameAvailable(created.getName());
             events.put(created.getName(), created);
             eventMarketMakers.put(created.getName(), creatorName);
         }
