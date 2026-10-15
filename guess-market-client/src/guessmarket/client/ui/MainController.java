@@ -1472,6 +1472,8 @@ public class MainController
             filePathLabel.setText("✓ " + file.getAbsolutePath());
             refreshEvents();
             refreshUsers();
+            showSuccess("File loaded successfully",
+                "\"" + file.getName() + "\" is valid and was accepted by the server. Its events were added to the system, with you as their Market Maker.");
         }, ex -> {
             filePathLabel.getStyleClass().add("filepath-label-rejected");
             filePathLabel.setText("✗ " + file.getAbsolutePath());
@@ -2658,6 +2660,18 @@ public class MainController
         return "pill-notactive";
     }
 
+    private void showError(final String message)
+    {
+        showMessageDialog("!", "Something went wrong", message, false);
+    }
+
+    // The spec asks for a message on a successful upload as well as on a failed one - this is the
+    // same window as showError, in the app's positive green with a check mark instead of the "!".
+    private void showSuccess(final String header, final String message)
+    {
+        showMessageDialog("✓", header, message, true);
+    }
+
     // Two rounds of trying to make JavaFX's built-in Alert/DialogPane wrap and size correctly both
     // failed - its internal skin keeps a "content.label" style rule and its own layout pass timing
     // that no amount of poking from outside (pinning width, deferring a resize) reliably overrides,
@@ -2665,13 +2679,17 @@ public class MainController
     // a plain Stage with a Scene whose root is a VBox sizes itself to that Scene's actual computed
     // preferred size when shown (standard JavaFX behavior, nothing special needed) - so a wrapped
     // Label's true multi-line height is correctly known and honored the first time, every time.
-    private void showError(final String message)
+    private void showMessageDialog(final String iconText, final String headerText, final String message, final boolean success)
     {
-        final Label icon = new Label("!");
+        final Label icon = new Label(iconText);
         icon.getStyleClass().add("error-dialog-icon");
 
-        final Label header = new Label("Something went wrong");
+        final Label header = new Label(headerText);
         header.getStyleClass().add("error-dialog-header");
+        if (success) {
+            icon.getStyleClass().add("dialog-success");
+            header.getStyleClass().add("dialog-success");
+        }
 
         final Label content = new Label(message);
         content.setWrapText(true);

@@ -616,6 +616,15 @@
     -fx-text-fill: -gm-text;
 }
 
+/* The same window reporting a success (a valid uploaded file): green instead of red. */
+.error-dialog-header.dialog-success {
+    -fx-text-fill: -gm-positive;
+}
+
+.error-dialog-icon.dialog-success {
+    -fx-background-color: -gm-positive;
+}
+
 /* A solid circle with a bold "!" - the standard error-icon shape, sized and colored to match this
    app's own palette instead of the OS's native icon set. */
 .error-dialog-icon {
