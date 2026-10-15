@@ -55,6 +55,7 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.FlowPane;
@@ -184,6 +185,11 @@ public class MainController
      * List instance every tick regardless of content, so this needs eventSummaryEquals, not
      * reference equality. */
     private List<EventSummaryDTO> lastRenderedUserDetailEvents = new ArrayList<>();
+
+    /** The holdings area of each participation card on the shown user's page, by event name - so a
+     * poll can refresh the numbers in place without rebuilding the page. Replaced on every rebuild. */
+    private Map<String, VBox> participationHoldings = new LinkedHashMap<>();
+    private static final String HOLDINGS_KEY = "holdingsKey";
 
     @FXML
     private void initialize()
@@ -1573,8 +1579,12 @@ public class MainController
         if (!(quiet && paneHasFocus(userAccountPane))) {
             renderUserAccountPane(selected);
         }
-        if (!(quiet && paneHasFocus(userDetailPane))) {
-            renderUserDetail(selected);
+        final boolean rebuilt = !(quiet && paneHasFocus(userDetailPane)) && renderUserDetail(selected);
+        // renderUserDetail only rebuilds when the page's structure changes, but trades change the
+        // numbers in the open single-event box and the participation cards - those are refreshed in
+        // place here, every tick, pausing only while a text field on the page is being typed in.
+        if (!rebuilt && !(quiet && textInputHasFocus(userDetailPane))) {
+            refreshUserDetailValues(selected);
         }
     }
 
@@ -1815,7 +1825,8 @@ public class MainController
         }
     }
 
-    private void renderUserDetail(final UserSummaryDTO user)
+    /** Returns true if the page was rebuilt (its fresh content is then already current). */
+    private boolean renderUserDetail(final UserSummaryDTO user)
     {
         // buildUserDetail's own output only ever depends on user.getName() (for the title/isSelf)
         // and, for the participation cards, each event's name/type/status/marketMakerName - never
@@ -1829,7 +1840,7 @@ public class MainController
         // pane actually renders means a pure balance change - on either side - no longer touches it.
         final boolean sameUser = lastRenderedUserDetailUser != null && lastRenderedUserDetailUser.getName().equals(user.getName());
         if (sameUser && listsEqual(lastRenderedUserDetailEvents, allEvents, this::participationRelevantEquals)) {
-            return;
+            return false;
         }
         lastRenderedUserDetailUser = user;
         lastRenderedUserDetailEvents = new ArrayList<>(allEvents);
@@ -1840,6 +1851,23 @@ public class MainController
         userDetailPane.getChildren().setAll(buildUserDetail(user, isSelf));
         restoreFieldValues(userDetailPane, typedValues);
         restoreScroll(userDetailPane, scroll);
+        return true;
+    }
+
+    // The values-only refresh of the shown user's page: the open single-event box is patched in
+    // place (same path a trade of your own uses), and only the participation cards of events this
+    // user is actually in are re-fetched - others can't have changed. Both are quiet: a failed
+    // fetch just waits for the next tick instead of opening an error window every second.
+    private void refreshUserDetailValues(final UserSummaryDTO user)
+    {
+        if (currentInlineView != null && currentInlineBox != null && currentInlineEventName != null) {
+            populateSingleEventBox(currentInlineEventName, currentInlineBox, user.getName(), true);
+        }
+        for (final Map.Entry<String, VBox> entry : participationHoldings.entrySet()) {
+            if (user.getRelevantEventNames().contains(entry.getKey())) {
+                loadParticipationHoldings(entry.getValue(), entry.getKey(), user.getName());
+            }
+        }
     }
 
     /**
@@ -1850,6 +1878,7 @@ public class MainController
      */
     private List<Node> buildUserDetail(final UserSummaryDTO user, final boolean isSelf)
     {
+        participationHoldings = new LinkedHashMap<>();
         final SectionCard outer = sectionCard("Account Details");
         final List<Node> nodes = outer.body().getChildren();
         final Label title = new Label(user.getName());
@@ -1947,67 +1976,104 @@ public class MainController
         }
         final Label hint = new Label("Click to view details & trade below");
         hint.getStyleClass().add("hint-chip");
-        card.getChildren().addAll(centerLabel(title), pills, centerLabel(hint));
-
-        runAsyncQuiet(() -> ApiClient.getEventDetails(eventName), details -> {
-            if (details instanceof LmsrEventDetailsDTO) {
-                final LmsrEventDetailsDTO lmsr = (LmsrEventDetailsDTO) details;
-                final Map<String, Integer> sharesByOption = new LinkedHashMap<>();
-                for (final OptionDTO option : lmsr.getOptions()) {
-                    sharesByOption.put(option.getName(), 0);
-                }
-                boolean hasTraded = false;
-                for (final TransactionDTO tx : lmsr.getTransactions()) {
-                    if (tx.getUserName().equals(userName)) {
-                        hasTraded = true;
-                        sharesByOption.merge(tx.getOptionName(), tx.getQuantity(), Integer::sum);
-                    }
-                }
-                if (!hasTraded) {
-                    card.getChildren().add(centerLabel(placeholder("No trades by this user yet.")));
-                } else {
-                    // A quick glance at this user's position - not the full trade-by-trade ledger,
-                    // which belongs only in the detailed view below, not in this summary card.
-                    final FlowPane tiles = new FlowPane(8, 8);
-                    tiles.setAlignment(Pos.CENTER);
-                    for (final OptionDTO option : lmsr.getOptions()) {
-                        final int qty = sharesByOption.get(option.getName());
-                        tiles.getChildren().add(statTile(option.getName(), qty + " shares", "meta-value"));
-                    }
-                    card.getChildren().add(tiles);
-                }
-            } else if (details instanceof OrderBookEventDetailsDTO) {
-                final OrderBookEventDetailsDTO ob = (OrderBookEventDetailsDTO) details;
-                ParticipantHoldingDTO match = null;
-                for (final ParticipantHoldingDTO p : ob.getParticipants()) {
-                    if (p.getUserName().equals(userName)) {
-                        match = p;
-                        break;
-                    }
-                }
-                if (match == null) {
-                    card.getChildren().add(centerLabel(placeholder("No holdings by this user yet.")));
-                } else {
-                    final FlowPane tiles = new FlowPane(8, 8);
-                    tiles.setAlignment(Pos.CENTER);
-                    for (int i = 0; i < ob.getOptionBooks().size(); i++) {
-                        final int qty = match.getHoldingsByOption().get(i);
-                        tiles.getChildren().add(statTile(ob.getOptionBooks().get(i).getOptionName(), qty + " shares", "meta-value"));
-                    }
-                    tiles.getChildren().add(statTile("Est. value", money(match.getEstimatedValue()), "meta-value-money"));
-                    card.getChildren().add(tiles);
-
-                    if ("CLOSED".equals(ob.getStatus()) && match.getProfitOrLoss() != null) {
-                        final double pl = match.getProfitOrLoss();
-                        final Label plLabel = new Label((pl >= 0 ? "Profit: " : "Loss: ") + money(Math.abs(pl)));
-                        plLabel.getStyleClass().add(pl >= 0 ? "pl-positive" : "pl-negative");
-                        card.getChildren().add(centerLabel(plLabel));
-                    }
-                }
-            }
-        });
+        // The fetched holdings go into their own box, so a later poll can refresh just them in
+        // place (see refreshUserDetailValues). Hidden and out of the layout until filled, so an
+        // empty box adds no stray spacing under the hint.
+        final VBox holdings = new VBox(6);
+        holdings.setAlignment(Pos.CENTER);
+        holdings.setManaged(false);
+        holdings.setVisible(false);
+        card.getChildren().addAll(centerLabel(title), pills, centerLabel(hint), holdings);
+        participationHoldings.put(eventName, holdings);
+        loadParticipationHoldings(holdings, eventName, userName);
 
         return card;
+    }
+
+    private void loadParticipationHoldings(final VBox holdings, final String eventName, final String userName)
+    {
+        runAsyncQuiet(() -> ApiClient.getEventDetails(eventName), details -> showParticipationHoldings(holdings, details, userName));
+    }
+
+    /**
+     * Fills one participation card's holdings box with this user's position in the event. The
+     * nodes are only replaced when what they show actually changed (tracked as a text key on the
+     * box), so a poll tick with nothing new leaves the card exactly as it was - no flicker.
+     */
+    private void showParticipationHoldings(final VBox holdings, final EventDetailsDTO details, final String userName)
+    {
+        final List<Node> nodes = new ArrayList<>();
+        final StringBuilder key = new StringBuilder();
+        if (details instanceof LmsrEventDetailsDTO) {
+            final LmsrEventDetailsDTO lmsr = (LmsrEventDetailsDTO) details;
+            final Map<String, Integer> sharesByOption = new LinkedHashMap<>();
+            for (final OptionDTO option : lmsr.getOptions()) {
+                sharesByOption.put(option.getName(), 0);
+            }
+            boolean hasTraded = false;
+            for (final TransactionDTO tx : lmsr.getTransactions()) {
+                if (tx.getUserName().equals(userName)) {
+                    hasTraded = true;
+                    sharesByOption.merge(tx.getOptionName(), tx.getQuantity(), Integer::sum);
+                }
+            }
+            if (!hasTraded) {
+                nodes.add(centerLabel(placeholder("No trades by this user yet.")));
+                key.append("no-trades");
+            } else {
+                // A quick glance at this user's position - not the full trade-by-trade ledger,
+                // which belongs only in the detailed view below, not in this summary card.
+                final FlowPane tiles = new FlowPane(8, 8);
+                tiles.setAlignment(Pos.CENTER);
+                for (final OptionDTO option : lmsr.getOptions()) {
+                    final int qty = sharesByOption.get(option.getName());
+                    tiles.getChildren().add(statTile(option.getName(), qty + " shares", "meta-value"));
+                    key.append(option.getName()).append('=').append(qty).append(';');
+                }
+                nodes.add(tiles);
+            }
+        } else if (details instanceof OrderBookEventDetailsDTO) {
+            final OrderBookEventDetailsDTO ob = (OrderBookEventDetailsDTO) details;
+            ParticipantHoldingDTO match = null;
+            for (final ParticipantHoldingDTO p : ob.getParticipants()) {
+                if (p.getUserName().equals(userName)) {
+                    match = p;
+                    break;
+                }
+            }
+            if (match == null) {
+                nodes.add(centerLabel(placeholder("No holdings by this user yet.")));
+                key.append("no-holdings");
+            } else {
+                final FlowPane tiles = new FlowPane(8, 8);
+                tiles.setAlignment(Pos.CENTER);
+                for (int i = 0; i < ob.getOptionBooks().size(); i++) {
+                    final int qty = match.getHoldingsByOption().get(i);
+                    tiles.getChildren().add(statTile(ob.getOptionBooks().get(i).getOptionName(), qty + " shares", "meta-value"));
+                    key.append(ob.getOptionBooks().get(i).getOptionName()).append('=').append(qty).append(';');
+                }
+                tiles.getChildren().add(statTile("Est. value", money(match.getEstimatedValue()), "meta-value-money"));
+                key.append("est=").append(money(match.getEstimatedValue())).append(';');
+                nodes.add(tiles);
+
+                if ("CLOSED".equals(ob.getStatus()) && match.getProfitOrLoss() != null) {
+                    final double pl = match.getProfitOrLoss();
+                    final Label plLabel = new Label((pl >= 0 ? "Profit: " : "Loss: ") + money(Math.abs(pl)));
+                    plLabel.getStyleClass().add(pl >= 0 ? "pl-positive" : "pl-negative");
+                    nodes.add(centerLabel(plLabel));
+                    key.append(plLabel.getText());
+                }
+            }
+        }
+
+        final String newKey = key.toString();
+        if (newKey.equals(holdings.getProperties().get(HOLDINGS_KEY))) {
+            return;
+        }
+        holdings.getProperties().put(HOLDINGS_KEY, newKey);
+        holdings.getChildren().setAll(nodes);
+        holdings.setManaged(!nodes.isEmpty());
+        holdings.setVisible(!nodes.isEmpty());
     }
 
     /**
@@ -2024,9 +2090,20 @@ public class MainController
      */
     private void populateSingleEventBox(final String eventName, final VBox box, final String viewedUserName)
     {
+        populateSingleEventBox(eventName, box, viewedUserName, false);
+    }
+
+    // quiet=true is the background refresh (refreshUserDetailValues): it only ever patches the view
+    // already showing this event in this box - never builds a new one, in case the page changed
+    // while the request was in flight - and a failed fetch stays silent instead of opening a window.
+    private void populateSingleEventBox(final String eventName, final VBox box, final String viewedUserName, final boolean quiet)
+    {
         final Runnable onChange = () -> populateSingleEventBox(eventName, box, viewedUserName);
-        runAsync(() -> ApiClient.getEventDetails(eventName), details -> {
+        final Consumer<EventDetailsDTO> apply = details -> {
             final boolean freshContext = box != currentInlineBox || !eventName.equals(currentInlineEventName);
+            if (quiet && freshContext) {
+                return;
+            }
             if (freshContext) {
                 currentInlineBox = box;
                 currentInlineEventName = eventName;
@@ -2048,7 +2125,12 @@ public class MainController
             } else {
                 ((OrderBookView) currentInlineView).update((OrderBookEventDetailsDTO) details, onChange);
             }
-        });
+        };
+        if (quiet) {
+            runAsyncQuiet(() -> ApiClient.getEventDetails(eventName), apply);
+        } else {
+            runAsync(() -> ApiClient.getEventDetails(eventName), apply);
+        }
     }
 
     // ---------------------------------------------------------------- users: actions
@@ -2379,6 +2461,14 @@ public class MainController
      * "nothing is happening here right now." Walking up from the focus owner via getParent() is
      * the only way to ask that, since Node has no built-in isAncestorOf.
      */
+    // Narrower than paneHasFocus: only a text field being typed in counts. A clicked button (Buy
+    // keeps focus after you press it) must not pause the values-only refresh, which never touches
+    // any input anyway - it only re-texts labels and tables.
+    private boolean textInputHasFocus(final Parent pane)
+    {
+        return pane.getScene() != null && pane.getScene().getFocusOwner() instanceof TextInputControl && paneHasFocus(pane);
+    }
+
     private boolean paneHasFocus(final Parent pane)
     {
         if (pane.getScene() == null) {
